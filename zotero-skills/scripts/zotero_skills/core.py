@@ -200,7 +200,7 @@ class MCP:
 
     def ensure_collection(self, name, library=1, parent=None):
         return self.js("""
-const all=Zotero.Collections.getByLibrary(P.library);
+const all=Zotero.Collections.getByLibrary(P.library,true);
 const hit=all.find(c=>c.name===P.name && (c.parentKey||null)===(P.parent||null));
 if(hit) return hit.key;
 const lib=Zotero.Libraries.get(P.library); if(!lib || !lib.editable) throw new Error('Library not editable');
