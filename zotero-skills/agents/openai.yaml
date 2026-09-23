@@ -1,0 +1,6 @@
+interface:
+  display_name: "Zotero 深度研究"
+  short_description: "深度检索与详细笔记、无损去重、文献蒸馏及可迭代的证据综述"
+  default_prompt: "使用 $zotero-skills 检索指定领域，导入 Zotero 并为每篇生成详细、可追溯的精读笔记。"
+policy:
+  allow_implicit_invocation: true
