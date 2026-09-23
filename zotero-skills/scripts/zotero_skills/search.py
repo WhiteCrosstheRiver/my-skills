@@ -253,7 +253,9 @@ def collect_evidence(run, paper, mcp, net):
     abstract = paper.get("abstract") or snap["item"].get("abstractNote", "")
     level = "fulltext" if text_size >= 1000 else "abstract" if abstract else "metadata"
     state = "readable" if text_size >= 1000 else "scan_or_short_text" if pages else "unavailable"
-    notes = [n for n in snap["notes"] if not any(t["tag"].startswith("zotero-skills:") for t in n.get("tags", []))]
+    # Existing notes, including human edits to generated notes, are context only.
+    # They never substitute for primary-source evidence in claims.json.
+    notes = snap["notes"]
     evidence = {"schema": 1, "item_key": paper["item_key"], "library_id": library, "title": paper["title"], "doi": paper.get("doi"), "abstract": abstract, "level": level, "fulltext_status": state, "retrieved_at": now(), "sources": sources, "pages": pages, "user_notes": notes, "annotations": [a for att in snap["attachments"] for a in att.get("annotations", [])], "metadata": snap["item"], "discovery_sources": paper.get("sources", []), "download_failures": failures}
     write_json(directory / "evidence.json", evidence)
     (directory / "fulltext.txt").write_text("\n\n".join(f"[{p['source']} p.{p['page']}]\n{p['text']}" for p in pages) or abstract, encoding="utf-8")
