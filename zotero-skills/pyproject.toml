@@ -19,7 +19,7 @@ zotero-skill = "zotero_skills.cli:main"
 where = ["scripts"]
 
 [tool.setuptools.package-data]
-zotero_skills = ["assets/*", "assets/katex/*", "assets/katex/fonts/*"]
+zotero_skills = ["assets/*", "assets/katex/*", "assets/katex/fonts/*", "assets/katex/contrib/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

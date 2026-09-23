@@ -3,6 +3,7 @@ import json
 import shutil
 from pathlib import Path
 
+from .core import write_lock_path
 from .core import MCP, Network, Run, digest, lock, read_json
 from .library import enumerate_items
 from .notes import render_markdown, split_frontmatter, validate_note
@@ -85,10 +86,10 @@ def execute(args):
     run = Run.create(args.output, 'distill', {'library': args.library, 'collection': args.collection, 'topic': args.topic, 'years': args.years, 'page_size': args.page_size})
     run.state['papers'] = [{'id': digest(str(args.library) + ':' + r['key'])[:20], 'item_key': r['key'], 'title': r.get('title', ''), 'doi': r.get('DOI'), 'abstract': r.get('abstractNote', ''), 'url': r.get('url'), 'status': 'selected', 'pdf_urls': []} for r in rows]
     run.save()  # Freeze all identities before any per-item work.
-    with lock(run.path / '.lock'), lock(args.output / '.zotero-write.lock'):
+    with lock(run.path / '.lock'), lock(write_lock_path()):
         return process(run, mcp, Network(args.output / 'cache'), refresh=args.refresh)
 
 
 def resume(run, args):
-    with lock(args.output / '.zotero-write.lock'):
+    with lock(write_lock_path()):
         return process(run, MCP(args.url), Network(args.output / 'cache'), retry=args.retry_errors)

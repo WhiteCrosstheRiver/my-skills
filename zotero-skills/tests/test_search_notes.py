@@ -87,6 +87,12 @@ def test_template_cannot_be_published():
         validate_note(note_template(e), [], e)
 
 
+def test_whitespace_only_sections_are_not_complete():
+    e = evidence(); note, claims = valid_note(e)
+    note = note.replace('## 核心贡献\n\n逐项阅读所得；全文不可得时仅使用摘要。[C1]', '## 核心贡献\n\n   ')
+    with pytest.raises(ValueError, match='Empty section'): validate_note(note, claims, e)
+
+
 def test_render_chinese_table_code_safe_html():
     result = render_markdown("# 中文\n\n| 参数 | 值 |\n|---|---|\n| 学习率 | 0.01 |\n\n```python\nx = 1\n```\n\n<script>alert(1)</script>\n[bad](javascript:alert(1))")
     assert "<table>" in result and "<pre><code>" in result and "中文" in result

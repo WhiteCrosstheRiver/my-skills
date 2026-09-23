@@ -57,8 +57,10 @@ def validate_note(note, claims, evidence):
     for heading in SECTIONS:
         if not re.search(r"^##\s+" + re.escape(heading) + r"\s*$", body, re.M):
             errors.append("Missing section: " + heading)
-        elif not re.search(r"^##\s+" + re.escape(heading) + r"\s*\n((?:(?!^##\s).)+)", body, re.M | re.S):
-            errors.append("Empty section: " + heading)
+        else:
+            section = re.search(r"^##[^\S\n]+" + re.escape(heading) + r"[^\S\n]*\n(.*?)(?=^##\s|\Z)", body, re.M | re.S)
+            if not section or not section[1].strip():
+                errors.append("Empty section: " + heading)
     if re.search(r"\b(?:TODO|TBD|PLACEHOLDER)\b|待填写|在此填写", body, re.I):
         errors.append("Unfinished placeholder found")
     # No filler quota: missing evidence is explicitly reported rather than invented.
@@ -115,6 +117,8 @@ def publish(run, paper_id, mcp):
     claims = read_json(directory / "claims.json")
     metadata, body = validate_note(note, claims, evidence)
     content_hash = digest(note)
+    claims_hash = digest(json.dumps(claims, sort_keys=True, ensure_ascii=False))
+    version_hash = digest(content_hash + claims_hash + metadata['source_hash'])
     html = render_markdown(body)
     library = run.state["config"].get("library", 1)
     marker = "zotero-skills:note:" + content_hash
@@ -132,11 +136,17 @@ const n=new Zotero.Item('note');n.libraryID=P.library;n.parentItemID=parent.id;n
     if not any(a["key"] == attachment["key"] for a in snap["attachments"]):
         raise RuntimeError("Markdown attachment readback failed")
     manifest = {"schema": 1, "published_at": now(), "library_id": library, "item_key": paper["item_key"], "note_key": result["key"], "markdown_attachment_key": attachment["key"], "content_hash": content_hash, "evidence_hash": metadata["source_hash"], "evidence_level": evidence["level"], "claims": claims, "note_path": str(directory / "note.md"), "evidence_path": str(directory / "evidence.json"), "reused": result["reused"]}
+    manifest.update(claims_hash=claims_hash, version_hash=version_hash)
     write_json(directory / "publication.json", manifest)
-    archive = run.path.parents[1] / "notes" / str(library) / paper["item_key"] / content_hash
+    archive = run.path.parents[1] / "notes" / str(library) / paper["item_key"] / version_hash
     archive.mkdir(parents=True, exist_ok=True)
     for name in ["note.md", "claims.json", "evidence.json", "publication.json"]:
-        (archive / name).write_bytes((directory / name).read_bytes())
+        target = archive / name
+        if target.exists():
+            if name != 'publication.json' and target.read_bytes() != (directory / name).read_bytes():
+                raise RuntimeError('Archived version was modified: ' + str(target))
+        else:
+            target.write_bytes((directory / name).read_bytes())
     paper.update(status="published", note_key=result["key"], note_hash=content_hash, markdown_attachment_key=attachment["key"])
     if all(p["status"] == "published" for p in run.state["papers"]):
         run.state["status"] = "complete"

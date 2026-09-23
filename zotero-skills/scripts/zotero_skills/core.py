@@ -49,6 +49,10 @@ class BusyError(RuntimeError):
     pass
 
 
+def write_lock_path():
+    return Path.home() / '.cache' / 'zotero-skills' / 'write.lock'
+
+
 @contextlib.contextmanager
 def lock(path):
     """OS-released lock: a killed process never leaves a permanent busy flag."""
@@ -183,7 +187,8 @@ class MCP:
         except ValueError:
             decoded = content
         if isinstance(decoded, dict) and (decoded.get("error") or decoded.get("success") is False):
-            raise RuntimeError(str(decoded))
+            error = decoded.get('error') or 'MCP tool reported failure'
+            raise RuntimeError(str(error.get('message', error) if isinstance(error, dict) else error))
         return decoded
 
     def js(self, code, **params):
@@ -198,6 +203,31 @@ class MCP:
         runtime = self.js("return {version:Zotero.version, libraryID:Zotero.Libraries.userLibraryID, write:Zotero.Prefs.get('extensions.zotero.zotero-agent.write.enabled',true), eval:Zotero.Prefs.get('extensions.zotero.zotero-agent.eval.enabled',true)};")
         return {"runtime": runtime, "missing": [x for x in required if x not in self.tools], "available_tools": len(self.tools), "credentials": "local; redacted"}
 
+    def read_large(self, code, **params):
+        """Freeze a read-only result and page it below Zotero Agent's result limit.
+
+        The cache is memory-only, uniquely keyed, cleaned on completion and pruned
+        on subsequent reads after a crashed client. Never re-execute writes.
+        """
+        key = uuid.uuid4().hex
+        wrapper = 'const value=await(async()=>{\n' + code + '\n})();\n' + """
+if(!Zotero.__zoteroSkillsReads)Zotero.__zoteroSkillsReads=new Map();
+const cache=Zotero.__zoteroSkillsReads;for(const [k,v] of cache)if(Date.now()-v.at>300000)cache.delete(k);
+const text=JSON.stringify(value);cache.set(P.readKey,{text,at:Date.now()});return {length:text.length};
+"""
+        size = self.js(wrapper, **params, readKey=key)['length']
+        parts = []
+        try:
+            for offset in range(0, size, 30000):
+                parts.append(self.js("""
+const x=Zotero.__zoteroSkillsReads?.get(P.key);if(!x)throw new Error('Read snapshot expired');
+const pair=i=>i>0&&x.text.charCodeAt(i-1)>=0xD800&&x.text.charCodeAt(i-1)<=0xDBFF&&x.text.charCodeAt(i)>=0xDC00&&x.text.charCodeAt(i)<=0xDFFF;
+let start=P.offset,end=Math.min(start+30000,x.text.length);if(pair(start))start++;if(pair(end))end++;return {chunk:x.text.slice(start,end)};
+""", key=key, offset=offset)['chunk'])
+            return json.loads(''.join(parts))
+        finally:
+            self.js('Zotero.__zoteroSkillsReads?.delete(P.key);return true;', key=key)
+
     def ensure_collection(self, name, library=1, parent=None):
         return self.js("""
 const all=Zotero.Collections.getByLibrary(P.library,true);
@@ -209,7 +239,7 @@ if(P.parent)c.parentKey=P.parent; await c.saveTx(); return c.key;
 """, name=name, library=library, parent=parent)
 
     def snapshot(self, key, library=1):
-        return self.js("""
+        return self.read_large("""
 const x=await Zotero.Items.getByLibraryAndKeyAsync(P.library,P.key);
 if(!x || x.deleted) throw new Error('Item missing or trashed: '+P.key);
 return {item:x.toJSON(), notes: await Promise.all(x.isRegularItem()?x.getNotes().map(async id=>{const n=await Zotero.Items.getAsync(id);return {key:n.key,html:n.getNote(),tags:n.getTags()}}):[]), attachments:await Promise.all(x.isRegularItem()?x.getAttachments().map(async id=>{const a=await Zotero.Items.getAsync(id);return {key:a.key,title:a.getField('title'),contentType:a.attachmentContentType,path:await a.getFilePathAsync(),url:a.getField('url'),annotations:a.isPDFAttachment()?a.getAnnotations().map(n=>n.toJSON()):[]}}):[])};
@@ -244,7 +274,8 @@ x.addToCollection(coll.id);await x.save();});return {itemKey:x.key,created};
         return self.js("""
 const item=await Zotero.Items.getByLibraryAndKeyAsync(P.library,P.key);if(!item||item.deleted)throw new Error('Parent missing');
 const marker='zotero-skills:file:'+P.sha;
-for(const id of item.getAttachments()){const a=await Zotero.Items.getAsync(id);if(a.hasTag(marker))return {key:a.key,reused:true};}
+// Tags are not proof of current bytes: a user may edit a generated attachment.
+// Python preflight verified file hashes; unmatched versions stay separate.
 const a=await Zotero.Attachments.importFromFile({file:P.path,parentItemID:item.id,title:P.title});a.addTag(marker);await a.saveTx();return {key:a.key,reused:false};
 """, key=key, path=str(Path(path).resolve()), title=title, sha=content_hash, library=library)
 

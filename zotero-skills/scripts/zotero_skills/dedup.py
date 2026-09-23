@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 
+from .core import write_lock_path
 from .core import MCP, Run, digest, lock, now, read_json, write_json
 from .library import enumerate_items
 
@@ -74,7 +75,7 @@ return await Promise.all(P.keys.map(snapshot));
 
 
 def tree(mcp, keys, library):
-    rows = mcp.js(TREE, keys=keys, library=library)
+    rows = mcp.read_large(TREE, keys=keys, library=library)
     def files(node):
         path = Path(node['path']) if node.get('path') else None
         node['files'] = {}
@@ -162,8 +163,12 @@ const rows=await Zotero.DB.queryAsync('SELECT i.key, d.itemID IS NOT NULL AS del
 
 
 def merge_group(mcp, directory, keys, library=1, inject=None, recover=False):
+    if len(keys) < 2 or len(set(keys)) != len(keys):
+        raise ValueError('Merge needs at least two distinct keys')
     directory = Path(directory)
     path = directory / 'merge.json'
+    if recover and not path.exists():
+        raise ValueError('No existing preparation manifest to restore')
     if path.exists():
         manifest = read_json(path)
         if keys != manifest['keys'] or library != manifest['library']:
@@ -289,14 +294,18 @@ def execute(args):
 
 
 def resume(run, args):
-    with lock(args.output / '.zotero-write.lock'):
+    with lock(write_lock_path()):
         mcp = MCP(args.url)
         for group in run.state['groups']:
             if group.get('status') == 'complete':
                 continue
-            result = merge_group(mcp, run.path / 'merges' / digest(group['keys'])[:16], group['keys'], run.state['config']['library'])
-            group.update(status='complete', verification=result)
+            directory = run.path / 'merges' / digest(group['keys'])[:16]
+            restoring = getattr(args, 'restore', False)
+            if restoring and not (directory / 'merge.json').exists():
+                continue
+            result = merge_group(mcp, directory, group['keys'], run.state['config']['library'], recover=restoring)
+            group.update(status='restored' if result.get('restored') else 'complete', verification=result)
             run.save()
-    run.state['status'] = 'complete'
+    run.state['status'] = 'restored' if getattr(args, 'restore', False) else 'complete'
     run.save()
     return {'run': str(run.path), 'merged_groups': len(run.state['groups']), 'needs_review': len(run.state['review'])}

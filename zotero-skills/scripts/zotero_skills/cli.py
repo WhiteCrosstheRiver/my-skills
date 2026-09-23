@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from .core import write_lock_path
 from .core import MCP, Network, Run, default_output, lock, read_json
 from .search import discover, prepare_selected
 from .notes import note_template, publish
@@ -33,6 +34,7 @@ def parser():
     resume.add_argument("--selection", type=Path)
     resume.add_argument("--discover", action="store_true")
     resume.add_argument("--retry-errors", action="store_true")
+    resume.add_argument("--restore", action="store_true", help="Restore prepared, unmerged dedup children")
     for name in ["publish-note", "note-template"]:
         command = sub.add_parser(name)
         command.add_argument("--run", type=Path, required=True)
@@ -74,16 +76,18 @@ def execute(args):
         return {"draft": str(target), "status": "draft_not_published"}
     if args.command == "publish-note":
         run = Run(args.run)
-        with lock(run.path / ".lock"), lock(args.output / ".zotero-write.lock"):
+        with lock(run.path / ".lock"), lock(write_lock_path()):
             return publish(run, args.paper, MCP(args.url))
     if args.command == "resume":
         run = Run(args.run)
         with lock(run.path / ".lock"):
+            if args.restore and run.state['mode'] != 'dedup':
+                raise ValueError('--restore applies only to a dedup recovery manifest')
             if run.state["mode"] == "deep-search":
                 net = Network(args.output / "cache")
                 if args.discover:
                     return discover(run, net)
-                with lock(args.output / ".zotero-write.lock"):
+                with lock(write_lock_path()):
                     return prepare_selected(run, MCP(args.url), net, args.selection)
             mod = __import__("zotero_skills." + run.state["mode"], fromlist=["resume"])
             return mod.resume(run, args)

@@ -6,6 +6,7 @@ No deletion of user records and no permanent erase anywhere in this suite.
 import json
 import os
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -37,6 +38,9 @@ def test_live_import_missing_pdf_idempotence_and_manual_notes():
     assert e["level"] == "abstract" and e["download_failures"]
     assert mcp.import_paper(paper, collection)["itemKey"] == paper["item_key"]
     human = mcp.js("const p=await Zotero.Items.getByLibraryAndKeyAsync(1,P.key);const n=new Zotero.Item('note');n.libraryID=1;n.parentItemID=p.id;n.setNote('<p>人工测试备注：必须保留。</p>');await n.saveTx();return n.key;", key=paper["item_key"])
+    mcp.js("const n=await Zotero.Items.getByLibraryAndKeyAsync(1,P.key);n.setNote('<p>人工测试备注：必须保留。</p>'+('<p>大笔记回读🧪：完整内容不得截断。</p>'.repeat(5000)));await n.saveTx();return true;", key=human)
+    large_note = next(n['html'] for n in mcp.snapshot(paper['item_key'])['notes'] if n['key'] == human)
+    assert len(large_note) > 100000 and large_note.count('🧪') == 5000
     note = note_template(e).replace("status: draft", "status: complete").replace("待填写：依据 evidence.json，缺失信息明确说明。", "本条为合成测试数据；全文不可得，仅据摘要验证程序流程，不作学术结论。[C1]")
     directory = run.paper_dir(paper)
     (directory / "note.md").write_text(note, encoding="utf-8")
@@ -52,4 +56,9 @@ def test_live_import_missing_pdf_idempotence_and_manual_notes():
     assert any(n["key"] == human and "必须保留" in n["html"] for n in snap["notes"])
     assert any(n["key"] == first["note_key"] and "用户追加" in n["html"] for n in snap["notes"])
     assert not any(a["contentType"] == "application/pdf" for a in snap["attachments"])
+    old_md = next(a for a in snap['attachments'] if a['key'] == first['markdown_attachment_key'])
+    Path(old_md['path']).write_text('人工修改的测试 Markdown，必须保留。', encoding='utf-8')
+    fourth = publish(run, paper['id'], mcp)
+    assert fourth['markdown_attachment_key'] != old_md['key']
+    assert '人工修改' in Path(old_md['path']).read_text(encoding='utf-8')
     write_json(run.path / "acceptance.json", {"passed": True, "checks": ["real_import", "metadata_survives_failed_pdf", "resume_after_import", "import_idempotence", "note_idempotence", "md_idempotence", "manual_note_preserved", "manual_edit_preserved"], "item_key": paper["item_key"]})
