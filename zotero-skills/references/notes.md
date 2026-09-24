@@ -6,6 +6,8 @@ Read evidence.json and the **whole** page-labeled fulltext.txt before analyzing 
 
 Frontmatter: schema, item_key, library_id, doi, evidence_level, status, generated_at, source_hash, analyst. Set `status: complete` only after real analysis. The source hash is SHA256 of `json.dumps(evidence, sort_keys=True, ensure_ascii=False).encode('utf-8')`. Evidence levels: `fulltext`, `abstract`, `metadata`. Missing facts should say 未报告/未验证/全文不可得. Fulltext unavailable notes must not infer experimental parameters from a title or abstract.
 
+**作者与团队检索（必做）**：作者与团队背景直接决定综述中的文献权重，蒸馏时必须用宿主的检索工具调查通讯作者与核心作者：所属课题组的规模与方向、在本文领域的代表性工作、是否为大型/高影响力团队（如长期维护本文所述的软件、方法或数据集）。每条检索到的信息都要先把网页文本（含 URL 和检索时间）追加进 evidence.json 的 `external_sources`（如 `{"id": "E1", "url": "...", "title": "...", "retrieved_at": "...", "text": "..."}`），重算 source_hash 后才能在 claims.json 里以该 ID 引用；摘录会被逐字校验。团队声望的判断写为 `inference` 并区分于网页原文 `reported`；查不到的信息写 未报告/未验证，不得虚构头衔、h 指数或团队规模。
+
 Required second-level sections: 文献身份与摘要；背景与研究问题；核心贡献；实验与论证思路；关键方法与过程；公式与参数；结果与对照；结论与适用边界；局限与矛盾；作者与团队；代码、数据与复现；研究启发；证据索引与生成记录。
 
 Use inline evidence IDs such as `[C1]` alongside important claims. Save claims.json:

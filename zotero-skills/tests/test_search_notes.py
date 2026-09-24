@@ -273,3 +273,25 @@ def test_help_table_covers_every_command():
     real = set(parser()._subparsers._group_actions[0].choices) - {"help"}
     assert real <= listed, real - listed
     assert "deep-search" in listed and "publish-note" in listed
+
+
+def test_author_claims_require_archived_external_sources(tmp_path):
+    import json
+    from zotero_skills.notes import validate_note
+    from zotero_skills.core import digest
+    evidence = {"schema": 1, "item_key": "K1", "library_id": 1, "level": "fulltext",
+                "title": "T", "abstract": "A", "metadata": {}, "doi": "10.1/xy",
+                "pages": [{"source": "P1", "page": 1, "text": "long enough page text here"}],
+                "external_sources": [{"id": "E1", "url": "https://lab.test", "text": "Zheyong Fan leads the GPUMD developer team"}]}
+    source_hash = digest(json.dumps(evidence, sort_keys=True, ensure_ascii=False))
+    body = "---\nschema: 1\nitem_key: K1\nlibrary_id: 1\ndoi: 10.1/xy\nevidence_level: fulltext\nstatus: complete\ngenerated_at: '1'\nsource_hash: " + source_hash + "\nanalyst: a\n---\n# T\n\n## 文献身份与摘要\n\nx [C1]\n\n## 背景与研究问题\n\nx\n\n## 核心贡献\n\nx\n\n## 实验与论证思路\n\nx\n\n## 关键方法与过程\n\nx\n\n## 公式与参数\n\nx\n\n## 结果与对照\n\nx\n\n## 结论与适用边界\n\nx\n\n## 局限与矛盾\n\nx\n\n## 作者与团队\n\nFan 团队维护 GPUMD [E1]\n\n## 代码、数据与复现\n\nx\n\n## 研究启发\n\nx\n\n## 证据索引与生成记录\n\nx\n"
+    claims = [{"id": "C1", "kind": "reported", "statement": "s", "evidence": [{"source": "P1", "page": 1, "excerpt": "page text here"}]},
+              {"id": "E1", "kind": "reported", "statement": "Fan 领导 GPUMD 开发者团队", "evidence": [{"source": "E1", "excerpt": "Fan leads the GPUMD developer"}]}]
+    metadata, checked = validate_note(body, claims, evidence)  # archived source passes
+    bad = list(claims)
+    bad[1] = {**claims[1], "evidence": [{"source": "E9", "excerpt": "Fan leads the GPUMD developer"}]}
+    with pytest.raises(ValueError, match="E9"):
+        validate_note(body, bad, evidence)
+    wrong = {**claims[1], "evidence": [{"source": "E1", "excerpt": "Fan has an h-index of 99"}]}
+    with pytest.raises(ValueError, match="Unverifiable excerpt"):
+        validate_note(body, [claims[0], wrong], evidence)
