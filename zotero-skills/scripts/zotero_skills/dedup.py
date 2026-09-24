@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .core import write_lock_path
 from .core import MCP, Run, digest, lock, now, read_json, write_json
+from . import lossless_qgram
 from .library import enumerate_items
 
 
@@ -53,13 +54,20 @@ def groups(items):
         (automatic if compatible(rows) else review).append(entry)
         assigned.update(entry['keys'])
     # Similar titles are review-only, including records with different identifiers.
-    for i, a in enumerate(items):
-        for b in items[i + 1:]:
-            if a['key'] in assigned and b['key'] in assigned and identifier(a) == identifier(b):
-                continue
-            ta, tb = normalized(a.get('title')), normalized(b.get('title'))
-            if min(len(ta), len(tb)) >= 15 and difflib.SequenceMatcher(None, ta, tb).ratio() >= .9:
-                review.append({'keys': [a['key'], b['key']], 'reason': 'Title similarity is not proof of identity'})
+    # The q-gram join is a proven lossless prefilter for the ratio() >= .9
+    # predicate: exact length feasibility, safe rare-token prefix, exact multiset
+    # 3-gram overlap, then the original difflib ratio with the original order.
+    titles = [normalized(x.get('title')) for x in items]
+    idents = {x['key']: identifier(x) for x in items}
+    keys = [x['key'] for x in items]
+    assigned_keys = set(assigned)
+
+    def exclude_pair(i, j):
+        # The application's existing rule: both already grouped by identical identifier.
+        return keys[i] in assigned_keys and keys[j] in assigned_keys and idents[keys[i]] == idents[keys[j]]
+
+    for pair in lossless_qgram.review_pairs(titles, exclude_pair=exclude_pair):
+        review.append({'keys': [keys[pair.i], keys[pair.j]], 'reason': 'Title similarity is not proof of identity'})
     return automatic, review
 
 

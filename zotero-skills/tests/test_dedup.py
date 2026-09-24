@@ -68,3 +68,68 @@ def test_live_lossless_merge_and_recovery():
     assert len(snap['item']['collections']) == 2
     assert len(snap['attachments']) == 4
     assert len(snap['notes']) == 3  # Two originals plus conflict audit.
+
+
+def _item(i, title):
+    return dict(key=f'K{i:04d}', itemType='journalArticle', DOI='', title=title, date='', dateAdded='2024', creators=[])
+
+
+def _brute_review(items):
+    """Frozen-baseline reference: the pre-optimization exact scan, with its loose length gate."""
+    import difflib
+    from zotero_skills.dedup import normalized
+    out = []
+    for i, a in enumerate(items):
+        for b in items[i + 1:]:
+            ta, tb = normalized(a.get('title')), normalized(b.get('title'))
+            if min(len(ta), len(tb)) >= 15 and difflib.SequenceMatcher(None, ta, tb).ratio() >= .9:
+                out.append((a['key'], b['key']))
+    return sorted(out)
+
+
+def test_review_scan_is_equivalent_to_frozen_baseline_scan():
+    import random
+    import string
+    random.seed(11)
+    words = [''.join(random.choices(string.ascii_lowercase, k=random.randint(4, 10))) for _ in range(400)]
+    items = []
+    for n in range(400):
+        title = ' '.join(random.choices(words, k=random.randint(5, 12)))
+        if items and random.random() < .15:  # near-duplicates of earlier titles
+            base = items[random.randrange(len(items))]['title']
+            title = base if random.random() < .5 else base + ' ' + random.choice(words)
+        items.append(_item(n, title))
+    from zotero_skills.dedup import normalized
+    from zotero_skills import lossless_qgram
+    keys = [x['key'] for x in items]
+    pairs = lossless_qgram.review_pairs([normalized(x['title']) for x in items], exclude_pair=lambda i, j: False)
+    got = sorted((keys[p.i], keys[p.j]) for p in pairs)
+    assert got == _brute_review(items)
+
+
+def test_review_scan_covers_repeated_gram_and_asymmetric_pairs():
+    from zotero_skills import lossless_qgram
+    # 52 shared repeated 3-grams but only one shared distinct gram: multiset, not set.
+    items = [_item(0, 'a' * 54 + 'bcdefg'), _item(1, 'a' * 54 + 'hijklm')]
+    assert len(groups(items)[1]) == 1
+    # difflib asymmetry: ratio(diet,tide)=0.90 but ratio(tide,diet)=0.85.
+    # The scan must keep the original i<j argument direction, so this hits...
+    items = [_item(0, 'x' * 16 + 'diet'), _item(1, 'x' * 16 + 'tide')]
+    assert len(groups(items)[1]) == 1
+    # ...and the reverse order must not gain a hit by flipping arguments.
+    items = [_item(0, 'x' * 16 + 'tide'), _item(1, 'x' * 16 + 'diet')]
+    assert len(groups(items)[1]) == 0
+
+
+def test_review_scan_results_are_deterministic():
+    import random
+    import string
+    titles = ['quantum capacitance of carbon nanotubes in ionic liquids',
+              'quantum capacitance of carbon nanotubes in ionic liquid',
+              'dynamic density functional theory of fluids',
+              'dynamic density functional theory of fluid',
+              'a completely unrelated title about photosynthesis mechanisms']
+    items = [_item(i, t) for i, t in enumerate(titles)]
+    first = [(x['keys']) for x in groups(items)[1]]
+    second = [(x['keys']) for x in groups(items)[1]]
+    assert first == second and len(first) >= 2

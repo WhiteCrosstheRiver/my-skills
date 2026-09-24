@@ -1,6 +1,6 @@
 # 去重与无损合并
 
-`zotero-skill dedup --collection KEY` 先保存计划；加 `--apply` 直接执行保守匹配，或 `resume --run PATH` 执行已保存计划。省略收藏夹则检查整个库。相同 DOI 或同版本 arXiv ID，且标题、年份、首作者和条目类型无明显冲突，才自动合并。仅标题相似的记录输出到 `run.json.review`，不能凭相似分数删除。
+`zotero-skill dedup --collection KEY` 先保存计划；加 `--apply` 直接执行保守匹配，或 `resume --run PATH` 执行已保存计划。省略收藏夹则检查整个库。相同 DOI 或同版本 arXiv ID，且标题、年份、首作者和条目类型无明显冲突，才自动合并。仅标题相似的记录输出到 `run.json.review`，不能凭相似分数删除。标题预审用无损 q-gram 连接（`lossless_qgram.py`）：先按可证明的多重集 3-gram 重叠下界做候选过滤，再用原始参数方向的 `SequenceMatcher.ratio() >= 0.9` 裁决，结果与逐对全扫描严格一致（冻结快照等价性测试保证），全库数千条量级秒级完成。
 
 默认最早创建的父条目为保留项。每组持久化 `merge.json`：原条目完整 JSON、全部子条目 key、笔记、批注、文件 SHA256、收藏夹、标签、关系及冲突字段。所有附件（含回收站附件）先在独立事务中移动，再调用 Zotero 10 原生 `mergeItems`；禁止在外层事务嵌套原生合并。两个事务之间中断可恢复。
 
