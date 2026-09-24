@@ -165,6 +165,7 @@ def verify(before, after):
 def committed_state(mcp, manifest):
     # SQL is authoritative after an interrupted transaction, unlike cached Items.
     return mcp.js("""
+for(let t=0;t<120&&Zotero.DB.inTransaction();t++)await Zotero.Promise.delay(500);
 if(Zotero.DB.inTransaction())throw new Error('Transaction still running; retry later');
 const rows=await Zotero.DB.queryAsync('SELECT i.key, d.itemID IS NOT NULL AS deleted FROM items i LEFT JOIN deletedItems d USING(itemID) WHERE i.libraryID=? AND i.key IN ('+P.keys.map(()=>'?').join(',')+')',[P.library,...P.keys]);return rows.map(r=>({key:r.key,deleted:r.deleted}));
 """, library=manifest['library'], keys=manifest['keys'])
@@ -225,6 +226,7 @@ await Zotero.DB.executeTransaction(async()=>{for(const move of P.moves){const x=
                 raise RuntimeError('Parent metadata changed since preflight: ' + original['key'] + ':' + field)
     expected = {x['key']: [c['key'] for c in x['children']] for x in manifest['before'][1:]}
     mcp.js("""
+for(let t=0;t<120&&Zotero.DB.inTransaction();t++)await Zotero.Promise.delay(500);
 const master=await Zotero.Items.getByLibraryAndKeyAsync(P.library,P.keys[0]);
 await Zotero.DB.executeTransaction(async()=>{for(const key of P.keys.slice(1)){const other=await Zotero.Items.getByLibraryAndKeyAsync(P.library,key);if(!other||other.deleted||master.deleted)throw new Error('Parent changed');for(const id of [...other.getAttachments(true),...other.getNotes(true)]){const a=await Zotero.Items.getAsync(id);if(!P.expected[key].includes(a.key))throw new Error('Unexpected new child');a.parentItemID=master.id;await a.save();}}
 if(P.inject==='prepare')throw new Error('Injected preparation rollback');});return true;
@@ -245,6 +247,7 @@ if(P.inject==='prepare')throw new Error('Injected preparation rollback');});retu
     manifest['process'] = mcp.js('return Zotero.initializationTime?.toString()||Services.appinfo.processID;')
     write_json(path, manifest)
     mcp.js("""
+for(let t=0;t<120&&Zotero.DB.inTransaction();t++)await Zotero.Promise.delay(500);
 const {mergeItems}=ChromeUtils.importESModule('chrome://zotero/content/mergeItems.mjs');
 const items=await Promise.all(P.keys.map(k=>Zotero.Items.getByLibraryAndKeyAsync(P.library,k)));
 if(items.some(x=>!x||x.deleted)||items.slice(1).some(x=>x.getAttachments(true).length||x.getNotes(true).length)||Zotero.DB.inTransaction())throw new Error('Native merge precondition changed');
