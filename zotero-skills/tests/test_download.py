@@ -142,3 +142,52 @@ def test_resume_unattached_file_needs_no_network(tmp_path):
         def get(self, *a, **kw): return pdf_bytes()
     with pytest.raises(TimeoutError): download.download_pdf(PAPER, tmp_path, Interrupted(), Net())
     assert download.download_pdf(PAPER, tmp_path, Client(), None)['status'] == 'downloaded'
+
+
+def test_scihub_skips_bot_pages_and_parses_embed(tmp_path, monkeypatch):
+    monkeypatch.setattr(download, 'scihub_mirrors', lambda net: ['https://sci-hub.se/', 'https://sci-hub.st/', 'https://sci-hub.ru/'])
+    pages = {
+        'https://sci-hub.se/10.1234/test': '<title>проверка на робота</title>',
+        'https://sci-hub.st/10.1234/test': '<html><body>no article here</body></html>',
+        'https://sci-hub.ru/10.1234/test': '<html><body><embed id="pdf" src="//http://cdn.test/p.pdf"></body></html>',
+    }
+    class Net:
+        last_response_url = None
+        def get(self, url, **kwargs):
+            assert kwargs.get('cache') is False and kwargs.get('json_data') is False
+            content = pages[url]
+            return b'%PDF-1.4 x' if not content else content.encode()
+    assert download.scihub(PAPER, Net()) == [{'url': 'https://cdn.test/p.pdf', 'source': 'Sci-Hub sci-hub.ru'}]
+
+
+def test_scihub_last_resort_after_all_resolvers_fail(tmp_path, monkeypatch):
+    monkeypatch.setattr(download, 'RESOLVERS', [('scihub', download.scihub)])
+    monkeypatch.setattr(download, 'scihub_mirrors', lambda net: ['https://sci-hub.se/', 'https://sci-hub.st/'])
+    class Net:
+        last_response_url = 'https://sci-hub.ren/10.1234/test'
+        def get(self, url, **kwargs):
+            if url.startswith('https://sci-hub.se/'):
+                return b'<title>Verification - Sci-Hub</title>'
+            if url.startswith('https://cdn.test/'):
+                return pdf_bytes()
+            mirror = url.removeprefix('https://sci-hub.st/')
+            return (f'<html><body><iframe id="pdf" src="https://cdn.test/{mirror}.pdf#view=FitH"></iframe></body></html>').encode()
+    paper = {**PAPER, 'pdf_urls': []}
+    result = download.download_pdf(paper, tmp_path, Client(), Net())
+    assert result['status'] == 'downloaded'
+    assert result['source']['provider'] == 'scihub' and result['source']['url'] == 'https://cdn.test/10.1234/test.pdf#view=FitH' and result['source']['source'] == 'Sci-Hub sci-hub.st'
+    assert download.normalized_doi('https://doi.org/10.1234/test') == '10.1234/test'
+
+
+def test_scihub_mirrors_from_source_page_and_static_fallback():
+    class Net:
+        def __init__(self, content): self.content = content
+        def get(self, url, **kwargs):
+            assert url == download.SCIHUB_SOURCE
+            return self.content.encode()
+    page = '<a href="http://sci-hub.se">x</a> <a href="https://www.sci-hub.st/">y</a> <a href="https://scihub.bban.top/">z</a> <a href="https://elsewhere.test/">no</a>'
+    assert download.scihub_mirrors(Net(page)) == ['https://sci-hub.se/', 'https://sci-hub.st/', 'https://scihub.bban.top/']
+    assert download.scihub_mirrors(Net('<a href="https://elsewhere.test/">no</a>')) == download.SCIHUB_MIRRORS
+    class Down:  # source-page outage falls back to the hardcoded list
+        def get(self, *a, **k): raise ConnectionError
+    assert download.scihub_mirrors(Down()) == download.SCIHUB_MIRRORS

@@ -100,6 +100,66 @@ def europepmc(paper, net):
             if str(u.get('documentStyle')).lower() == 'pdf' and u.get('availabilityCode') == 'OA']
 
 
+SCIHUB_MIRRORS = ['https://sci-hub.se/', 'https://sci-hub.st/', 'https://sci-hub.ru/',
+                  'https://sci-hub.box/', 'https://sci-hub.ren/', 'https://sci-hub.ee/']
+# The page tracks mirror availability and is updated as links die and return.
+SCIHUB_SOURCE = 'https://tool.yovisun.com/scihub/'
+# Mirrors answer 200 with a bot check or a not-found notice instead of an error code.
+SCIHUB_BLOCKED = re.compile(r'проверка на робота|captcha|<title>\s*verification\b|статья не найдена в базе', re.I)
+
+
+def scihub_mirrors(net):
+    """Live mirror list first; the hardcoded list only covers a source-page outage."""
+    try:
+        html = net.get(SCIHUB_SOURCE, json_data=False).decode('utf-8', errors='replace')
+    except Exception:
+        return list(SCIHUB_MIRRORS)
+    found = []
+    for href in re.findall(r'<a[^>]+href="(https?://[^"]+)"', html, re.I):
+        host = urlsplit(href).hostname or ''
+        if re.fullmatch(r'(www\.)?(sci-hub|scihub)\.[a-z.\-]+', host):
+            url = 'https://' + re.sub(r'^www\.', '', host) + '/'
+            if url not in found:
+                found.append(url)
+    return found or list(SCIHUB_MIRRORS)
+
+
+def scihub_pdf_url(html, base):
+    # The mirror embeds the file as <embed/iframe id="pdf" src="...">; attribute order varies.
+    for pattern in (r'id=["\']pdf["\'][^>]*?\bsrc=["\']([^"\']+)',
+                    r'\bsrc=["\']([^"\']+)["\'][^>]*?id=["\']pdf["\']'):
+        match = re.search(pattern, html, re.I)
+        if match:
+            # Mirrors occasionally emit //https://cdn... double schemes; unwrap and force https.
+            url = urljoin(base, match.group(1))
+            url = re.sub(r'^(https?:)?/+https?://', 'https://', url)
+            return re.sub(r'^http://', 'https://', url)
+    return None
+
+
+def scihub(paper, net):
+    """Final fallback: query Sci-Hub mirrors for the DOI and return the embedded PDF URL."""
+    ident = normalized_doi(paper.get('doi'))
+    if not ident:
+        return []
+    for mirror in scihub_mirrors(net):
+        page_url = mirror + quote(ident, safe='/')
+        try:
+            content = net.get(page_url, json_data=False, cache=False)
+        except Exception:
+            continue
+        if content[:1024].startswith(b'%PDF-'):
+            # Some networks answer the page request with the file itself; let attempt() re-fetch it.
+            return [{'url': page_url, 'source': 'Sci-Hub ' + urlsplit(mirror).hostname}]
+        html = content.decode('utf-8', errors='replace')
+        if SCIHUB_BLOCKED.search(html):
+            continue
+        url = scihub_pdf_url(html, getattr(net, 'last_response_url', page_url))
+        if url:
+            return [{'url': url, 'source': 'Sci-Hub ' + urlsplit(mirror).hostname}]
+    return []
+
+
 def crossref(paper, net):
     ident = normalized_doi(paper.get('doi'))
     if not ident:
@@ -149,7 +209,7 @@ def pmc_cloud(paper, net):
 
 
 RESOLVERS = [('openalex', openalex), ('unpaywall', unpaywall), ('semantic', semantic),
-             ('europepmc', europepmc), ('pmc-cloud', pmc_cloud), ('crossref', crossref)]
+             ('europepmc', europepmc), ('pmc-cloud', pmc_cloud), ('crossref', crossref), ('scihub', scihub)]
 
 
 class CitationMeta(HTMLParser):
