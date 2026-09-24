@@ -18,6 +18,8 @@ def parser():
     p.add_argument("--url", help="Zotero Agent MCP URL (token via local configuration/environment)")
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor")
+    sub.add_parser("help", help="Show a table of every command and what it does")
+    sub.add_parser("update", help="Update this skill from its remote git repository")
     search = sub.add_parser("deep-search", help="Discover candidates; selection and analysis are performed by the host agent")
     search.add_argument("--topic", required=True)
     search.add_argument("--query", action="append", dest="queries")
@@ -45,7 +47,7 @@ def parser():
     status = sub.add_parser("status")
     status.add_argument("--run", type=Path, required=True)
     # Later-stage modules register their interfaces without changing shared behavior.
-    for module in ["dedup", "distill", "review"]:
+    for module in ["dedup", "distill", "review", "download"]:
         try:
             mod = __import__("zotero_skills." + module, fromlist=["register"])
         except ModuleNotFoundError as exc:
@@ -57,6 +59,10 @@ def parser():
 
 
 def execute(args):
+    if args.command == "help":
+        return help_table()
+    if args.command == "update":
+        return update_from_remote()
     if args.command == "doctor":
         result = MCP(args.url).doctor()
         from .search import probe_sources
@@ -105,8 +111,49 @@ def execute(args):
                     return prepare_selected(run, MCP(args.url), net, args.selection)
             mod = __import__("zotero_skills." + run.state["mode"], fromlist=["resume"])
             return mod.resume(run, args)
-    mod = __import__("zotero_skills." + args.command, fromlist=["execute"])
+    module = "download" if args.command == "fetch-pdfs" else args.command
+    mod = __import__("zotero_skills." + module, fromlist=["execute"])
     return mod.execute(args)
+
+
+def help_table():
+    return {
+        "overview": "模型负责学术阅读与写作，本 CLI 负责确定性操作：检索、入库、证据管理、无损合并与版本化输出。全局 --output / --url 放在命令最前面。",
+        "commands": [
+            ["doctor", "检查 Zotero 连接/权限/版本，并探测全部检索源(含 scholar/xmol 等)连通性"],
+            ["help", "显示本命令表"],
+            ["update", "从远程 GitHub 仓库拉取并更新本 skill"],
+            ["deep-search --topic 主题 --query 检索式 --years 2018-2026", "多源深度检索+引文扩展；默认含 Google Scholar/X-MOL 宿主协作源(生成 web_sources.json，宿主浏览器读取后 --input 合并)；候选宁全勿缺"],
+            ["resume --run PATH --input FILE", "把宿主采集的 BibTeX/RIS/DOI列表 合并进候选池(Crossref 校验，幂等)"],
+            ["resume --run PATH --selection selection.json", "按入选清单导入 Zotero(已有条目只补空缺，绝不覆盖；新条目入 我的文献/Agent/专题)"],
+            ["resume --run PATH --discover", "重试失败的检索(保留已缓存结果)"],
+            ["resume --run PATH --retry-errors", "按任务类型恢复出错文献"],
+            ["status --run PATH", "查看任务 pending/error/published 状态"],
+            ["note-template --run PATH --paper ID", "生成待分析笔记模板(草稿，非成品)"],
+            ["publish-note --run PATH --paper ID", "校验并发布宿主完成的笔记(note.md+claims.json)到 Zotero"],
+            ["dedup --collection KEY [--apply]", "去重：仅合并标识/元数据兼容的重复组，保留子条目与恢复清单；省略 apply 仅出计划"],
+            ["fetch-pdfs --run PATH [--force]", "为已选文献补缺PDF：OpenAlex/Unpaywall/Semantic/arXiv 多解析器合法回退，只增不覆盖，可断点续跑"],
+            ["distill --collection KEY", "蒸馏整个收藏夹树(无篇数截断)，复用笔记管线，保留历史版本"],
+            ["review --title 标题 --source-run PATH", "冻结已发布精读，生成证据矩阵供宿主综合写综述"],
+            ["review --publish --run PATH", "发布版本化综述、离线HTML(内置KaTeX)与完整证据包"],
+        ],
+        "typical_flow": "deep-search → 宿主读 web_sources.json 合并 --input → 写 selection.json → resume --selection → 逐篇读证据写 note.md/claims.json → publish-note → (可选) distill / review",
+        "docs": "各阶段详见 references/{search,notes,dedup,distill,review}.md",
+    }
+
+
+def update_from_remote():
+    import subprocess
+    skill_root = Path(__file__).resolve()
+    while skill_root != skill_root.parent and not (skill_root / ".git").exists():
+        skill_root = skill_root.parent
+    if not (skill_root / ".git").exists():
+        raise ValueError("Skill folder is not inside a git checkout; reinstall with pip install -e <folder> or git clone")
+    result = subprocess.run(["git", "-C", str(skill_root), "pull", "--ff-only"], capture_output=True, text=True, timeout=120)
+    if result.returncode != 0:
+        raise RuntimeError("git pull failed: " + (result.stderr or result.stdout).strip()[:300])
+    head = subprocess.run(["git", "-C", str(skill_root), "log", "-1", "--format=%h %s"], capture_output=True, text=True, timeout=30)
+    return {"skill_root": str(skill_root), "status": "updated" if "Already up to date" not in result.stdout else "already-up-to-date", "git_output": result.stdout.strip()[:300], "head": head.stdout.strip()}
 
 
 def main():

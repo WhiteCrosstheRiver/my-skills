@@ -230,19 +230,22 @@ def test_oa_resolver_parses_and_dedups_openalex_locations():
         def get(self, url, params=None, **kwargs):
             assert url.startswith("https://api.openalex.org/works/doi:")
             return {"best_oa_location": {"pdf_url": "https://repo/a.pdf", "is_oa": True},
-                    "locations": [{"pdf_url": "https://repo/a.pdf"}, {"pdf_url": "https://pub/b.pdf"}, {"pdf_url": None}]}
+                    "locations": [{"pdf_url": "https://repo/a.pdf"}, {"pdf_url": "https://pub/b.pdf", "is_oa": True}, {"pdf_url": None}]}
     assert oa_pdf_urls({"doi": "10.1/ABC"}, Net()) == ["https://repo/a.pdf", "https://pub/b.pdf"]
     assert oa_pdf_urls({"doi": ""}, Net()) == []
 
 
 def test_collect_evidence_falls_back_to_oa_chain(tmp_path):
     class Client:
-        def snapshot(self, *args): return {"item": {"title": "Paper", "abstractNote": "abstract"}, "notes": [], "attachments": []}
-        def attach(self, *args): return {"key": "ATT1"}
+        attached = []
+        def snapshot(self, *args): return {"item": {"title": "Paper", "abstractNote": "abstract"}, "notes": [], "attachments": self.attached}
+        def attach(self, key, path, *args):
+            self.attached = [{"key": "ATT1", "path": str(path), "contentType": "application/pdf"}]
+            return {"key": "ATT1"}
     class Net:
         def get(self, url, params=None, json_data=True, cache=True, headers=None):
             if url.startswith("https://api.openalex.org/"):
-                return {"best_oa_location": {"pdf_url": "https://repo/real.pdf"}, "locations": []}
+                return {"best_oa_location": {"pdf_url": "https://repo/real.pdf", "is_oa": True}, "locations": []}
             if "test.invalid" in url:
                 import httpx
                 raise httpx.HTTPStatusError("404", request=None, response=httpx.Response(404))
@@ -261,3 +264,12 @@ def test_collect_evidence_falls_back_to_oa_chain(tmp_path):
     assert result["level"] == "fulltext"
     assert any(s.get("url") == "https://repo/real.pdf" for s in result["sources"])
     assert any(s["provider"] == "oa-resolver" for s in p["sources"])
+
+
+def test_help_table_covers_every_command():
+    from zotero_skills.cli import help_table, parser
+    table = help_table()
+    listed = {row[0].split()[0] for row in table["commands"]}
+    real = set(parser()._subparsers._group_actions[0].choices) - {"help"}
+    assert real <= listed, real - listed
+    assert "deep-search" in listed and "publish-note" in listed

@@ -232,26 +232,12 @@ def extract_pdf(path):
 
 
 def oa_pdf_urls(paper, net):
-    """Second download chain: resolve legal open-access copies by DOI via OpenAlex.
-
-    Legitimate OA locations only (repositories, preprints, publisher OA). Never
-    shadow libraries or access-control bypasses; failures return quietly.
-    """
-    ident = doi(paper.get("doi"))
-    if not ident:
-        return []
-    import os
-    params = {"mailto": os.environ.get("ZOTERO_SKILLS_CONTACT_EMAIL", "zotero-skills@example.org")}
+    """Compatibility helper: only explicitly open-access OpenAlex locations."""
+    from .download import openalex
     try:
-        data = net.get("https://api.openalex.org/works/doi:" + ident, params)
+        return list(dict.fromkeys(row['url'] for row in openalex(paper, net)))
     except Exception:
         return []
-    urls = []
-    best = data.get("best_oa_location") or {}
-    for loc in [best] + (data.get("locations") or []):
-        if isinstance(loc, dict) and loc.get("pdf_url"):
-            urls.append(loc["pdf_url"])
-    return list(dict.fromkeys(urls))
 
 
 def collect_evidence(run, paper, mcp, net):
@@ -271,29 +257,23 @@ def collect_evidence(run, paper, mcp, net):
                 sources.append({"id": attachment["key"], "type": "pdf", "path": file, "title": attachment["title"], "sha256": digest(Path(file).read_bytes())})
             except Exception as exc:
                 failures.append({"source": attachment["key"], "reason": type(exc).__name__ + ": " + str(exc)})
-    if not pages:
-        # Chain 1: provider links and arXiv. Chain 2: legal OA resolution by DOI.
-        oa = oa_pdf_urls(paper, net)
-        urls = list(dict.fromkeys(paper.get("pdf_urls", []) + (["https://arxiv.org/pdf/" + paper["arxiv"]] if paper.get("arxiv") else []) + oa))
-        if oa:
-            paper.setdefault("sources", []).append({"provider": "oa-resolver", "candidates": oa, "at": now()})
-        for url in urls:
-            try:
-                content = net.get(url, json_data=False, cache=False)
-                if b"%PDF-" not in content[:1024]:
-                    raise ValueError("Response is not a PDF")
-                pdf = directory / "paper.pdf"
-                pdf.write_bytes(content)
-                found = extract_pdf(pdf)
-                attachment = mcp.attach(paper["item_key"], pdf, paper["title"], library)
-                for p in found:
-                    p["source"] = attachment["key"]
-                pages = found
-                sources.append({"id": attachment["key"], "type": "pdf", "url": url, "path": str(pdf), "sha256": digest(content)})
-                paper["pdf_attachment_key"] = attachment["key"]
-                break
-            except Exception as exc:
-                failures.append({"url": url, "reason": type(exc).__name__ + ": " + str(exc)})
+    from .download import download_pdf, local_pdfs
+    if not local_pdfs(snap):
+        result = download_pdf(paper, directory, mcp, net, library, snapshot=snap)
+        failures.extend(a for a in result['attempts'] if a.get('status') in ('failed', 'not_pdf', 'unconfigured'))
+        if result['status'] == 'downloaded':
+            attachment_key = result['attachment_key']
+            found = extract_pdf(result['path'])
+            for page in found:
+                page['source'] = attachment_key
+            pages = found
+            source = result.get('source', {})
+            sources.append({'id': attachment_key, 'type': 'pdf', 'url': source.get('url'),
+                            'path': result['path'], 'sha256': result['sha256']})
+            paper['pdf_attachment_key'] = attachment_key
+            paper.setdefault('sources', []).append({'provider': 'oa-resolver' if source.get('provider') != 'primary' else 'primary',
+                                                     'download_source': source, 'at': now()})
+    paper.pop('evidence_refresh_required', None)
     text_size = sum(len(p["text"].strip()) for p in pages)
     abstract = paper.get("abstract") or snap["item"].get("abstractNote", "")
     level = "fulltext" if text_size >= 1000 else "abstract" if abstract else "metadata"

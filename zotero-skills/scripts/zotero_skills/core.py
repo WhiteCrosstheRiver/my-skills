@@ -287,13 +287,32 @@ const marker='zotero-skills:file:'+P.sha;
 const a=await Zotero.Attachments.importFromFile({file:P.path,parentItemID:item.id,title:P.title});a.addTag(marker);await a.saveTx();return {key:a.key,reused:false};
 """, key=key, path=str(Path(path).resolve()), title=title, sha=content_hash, library=library)
 
+    def find_local_pdfs(self, paper, library=1):
+        """Check other records of the same DOI before backfilling a duplicate parent."""
+        if not paper.get('doi'):
+            return []
+        return self.read_large(r"""
+const norm=v=>String(v||'').trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,'').replace(/^doi:\s*/,'');
+const s=new Zotero.Search();s.libraryID=P.library;s.addCondition('itemType','isNot','attachment');s.addCondition('itemType','isNot','note');
+const out=[];for(const i of await Zotero.Items.getAsync(await s.search())){
+if(i.deleted||i.key===P.key||norm(i.getField('DOI'))!==norm(P.doi))continue;
+for(const id of i.getAttachments()){const a=await Zotero.Items.getAsync(id);if(a.attachmentContentType==='application/pdf'&&await a.fileExists())out.push({key:a.key,parent_key:i.key,path:await a.getFilePathAsync(),contentType:'application/pdf'});}}
+return out;
+""", library=library, key=paper['item_key'], doi=paper['doi'])
+
 
 class Network:
     """GET-only retries; use the OS certificate store, including corporate roots."""
     def __init__(self, cache):
         self.cache = Path(cache)
         self.cache.mkdir(parents=True, exist_ok=True)
-        self.client = httpx.Client(verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=45, follow_redirects=True, headers={"User-Agent": "zotero-skills/0.1 (+https://github.com/WhiteCrosstheRiver/my-skills)", "Accept-Encoding": "gzip, deflate"})
+        import urllib.request
+        # Windows desktop proxy settings are not read by httpx; honor the system
+        # HTTPS proxy for public downloads. MCP keeps its separate direct client.
+        proxy = os.environ.get('ZOTERO_SKILLS_HTTP_PROXY')
+        if not proxy and os.name == 'nt' and not any(os.environ.get(k) for k in ('HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy')):
+            proxy = urllib.request.getproxies().get('https')
+        self.client = httpx.Client(proxy=proxy, verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=45, follow_redirects=True, headers={"User-Agent": "zotero-skills/0.1 (+https://github.com/WhiteCrosstheRiver/my-skills)", "Accept-Encoding": "gzip, deflate"})
         self.last = {}
 
     def get(self, url, params=None, json_data=True, cache=True, headers=None):
@@ -323,6 +342,7 @@ class Network:
                     time.sleep(min(float(wait) if wait.isdigit() else 2 ** (attempt + 1), 45))
                     continue
                 response.raise_for_status()
+                self.last_response_url = str(response.url)
                 value = response.json() if json_data else response.content
                 if cache:
                     if json_data:
