@@ -6,6 +6,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from urllib.parse import quote_plus
 
 import pymupdf as fitz
 
@@ -26,6 +27,23 @@ def identity(p):
     if p.get("arxiv"):
         return "arxiv:" + re.sub(r"v\d+$", "", p["arxiv"])
     return "title:" + re.sub(r"[^\w]", "", p["title"].casefold()) + ":" + str(p.get("year", ""))
+
+
+# Host-assisted sources: these sites offer no bulk API and forbid automated
+# harvesting, so the CLI emits ready-to-open search URLs and the host agent
+# reads results with its browsing tools, saves the site's own export files,
+# and merges them back with resume --input. Never scrape them programmatically.
+WEB_SEARCH_URLS = {
+    "scholar": lambda query, years: "https://scholar.google.com/scholar?hl=en" + (f"&as_ylo={years.split('-')[0]}&as_yhi={years.split('-')[-1]}" if years else "") + "&q=" + quote_plus(query),
+    "researchgate": lambda query, years: "https://www.researchgate.net/search?q=" + quote_plus(query),
+    "xmol": lambda query, years: "https://www.x-mol.com/paper/search/q?option=" + quote_plus(query),
+}
+
+WEB_SEARCH_EXPORT_HINTS = {
+    "scholar": "Scholar 每条结果下 Cite → BibTeX 复制保存为 .bib；也可保存结果页 DOI/标题列表为 .md",
+    "researchgate": "ResearchGate 条目 Export citation → RIS 保存为 .ris；或保存 DOI 列表为 .md",
+    "xmol": "X-MOL 检索后逐条复制 DOI/标题保存为 .md（X-MOL 无批量引文导出；部分结果需登录可见）",
+}
 
 
 def merge_candidates(records):
@@ -264,27 +282,12 @@ def collect_evidence(run, paper, mcp, net):
     return evidence
 
 
-def discover(run, net):
-    config = run.state["config"]
-    providers = Providers(net)
+def import_input_files(run, net, files):
+    """Merge host-collected export files (bib/ris/md) into the candidate pool."""
     records = list(run.state.get("candidates", []))
     done = set(run.state.get("queries_done", []))
-    for provider in config.get("providers", ["semantic", "crossref", "arxiv"]):
-        for query in config.get("queries") or [config["topic"]]:
-            task = provider + ":" + query
-            if task in done:
-                continue
-            try:
-                rows = getattr(providers, provider)(query, config.get("candidate_limit", 100), config.get("years"))
-                records.extend(rows)
-                run.state["candidates"] = merge_candidates(records)
-                done.add(task)
-                run.state["queries_done"] = sorted(done)
-                run.event("query_completed", provider=provider, query=query, count=len(rows))
-            except Exception as exc:
-                # No request URL in diagnostics: optional provider keys can be query parameters.
-                run.event("query_failed", provider=provider, query=query, error=type(exc).__name__)
-    for filename in config.get("inputs", []):
+    added = 0
+    for filename in files:
         task = "file:" + str(filename)
         if task in done:
             continue
@@ -301,10 +304,110 @@ def discover(run, net):
                 except Exception:
                     row["verified_doi"] = False
         records.extend(rows)
+        added += len(rows)
         done.add(task)
-        run.state["queries_done"] = sorted(done)
-        run.state["candidates"] = merge_candidates(records)
-        run.save()
+    run.state["queries_done"] = sorted(done)
+    run.state["candidates"] = merge_candidates(records)
+    run.save()
+    write_json(run.path / "candidates.json", run.state["candidates"])
+    return added
+
+
+PROBE_URLS = {
+    "semantic": ("https://api.semanticscholar.org/graph/v1/paper/search/bulk", {"query": "test", "limit": 1}),
+    "crossref": ("https://api.crossref.org/works", {"rows": 1}),
+    "arxiv": ("https://export.arxiv.org/api/query", {"search_query": "all:test", "max_results": 1}),
+    "europepmc": ("https://www.ebi.ac.uk/europepmc/webservices/rest/search", {"query": "test", "format": "json", "pageSize": 1}),
+    "openalex": ("https://api.openalex.org/works", {"per_page": 1}),
+    "scholar": ("https://scholar.google.com/scholar", {"hl": "en", "q": "test"}),
+    "researchgate": ("https://www.researchgate.net/search", {"q": "test"}),
+    "xmol": ("https://www.x-mol.com/paper/search/q", {"option": "test"}),
+}
+
+
+def probe_sources(net, providers=None):
+    """One light GET per source: classify reachability, never scrape results."""
+    import os
+    out = {}
+    for name, (url, params) in PROBE_URLS.items():
+        if providers and name not in providers:
+            continue
+        try:
+            value = net.get(url, params, json_data=False, cache=False)
+            ok = len(value) > 0
+            out[name] = "ok" if ok else "empty"
+        except Exception as exc:
+            import re as _re
+            m = _re.search(r"'(\d{3}) ", str(exc))
+            status = m.group(1) if m else ""
+            if status == "429":
+                out[name] = "reachable (rate limited)"
+            elif status in ("403", "404"):
+                out[name] = "blocked for automation (host browser may still work)"
+            elif status:
+                out[name] = "reachable (HTTP " + status + ")"
+            else:
+                out[name] = type(exc).__name__ + ":" + str(exc)[:60]
+    if not os.environ.get("SEMANTIC_SCHOLAR_API_KEY"):
+        out.setdefault("_hints", []).append("SEMANTIC_SCHOLAR_API_KEY 未配置，Semantic Scholar 匿名额度易限流")
+    if not os.environ.get("OPENALEX_API_KEY"):
+        out.setdefault("_hints", []).append("OPENALEX_API_KEY 未配置，openalex 源不可用")
+    return out
+
+
+def record_host_searches(run):
+    """Emit search URLs for host-assisted providers; no HTTP is sent to them."""
+    config = run.state["config"]
+    done = set(run.state.get("queries_done", []))
+    searches = run.state.setdefault("host_searches", [])
+    for provider, url_for in WEB_SEARCH_URLS.items():
+        if provider not in config.get("providers", []):
+            continue
+        for query in config.get("queries") or [config["topic"]]:
+            task = provider + ":" + query
+            if task in done:
+                continue
+            searches.append({"provider": provider, "query": query, "url": url_for(query, config.get("years")), "export_hint": WEB_SEARCH_EXPORT_HINTS[provider]})
+            done.add(task)
+            run.event("host_search_required", provider=provider, query=query)
+    run.state["queries_done"] = sorted(done)
+    if searches:
+        write_json(run.path / "web_sources.json", {
+            "schema": 1,
+            "topic": config.get("topic"),
+            "instructions": "宿主用浏览器或网页读取工具逐条打开 url，阅读结果并把间接相关的条目一并保留；用各站自带的导出/引用功能保存为文件，然后 resume --run PATH --input FILE 合并。这些站点禁止程序化抓取，只能宿主协作完成。",
+            "export_hints": WEB_SEARCH_EXPORT_HINTS,
+            "searches": searches,
+        })
+    run.save()
+
+
+def discover(run, net):
+    config = run.state["config"]
+    providers = Providers(net)
+    records = list(run.state.get("candidates", []))
+    done = set(run.state.get("queries_done", []))
+    for provider in config.get("providers", ["semantic", "crossref", "arxiv"]):
+        if provider in WEB_SEARCH_URLS:
+            continue
+        for query in config.get("queries") or [config["topic"]]:
+            task = provider + ":" + query
+            if task in done:
+                continue
+            try:
+                rows = getattr(providers, provider)(query, config.get("candidate_limit", 100), config.get("years"))
+                records.extend(rows)
+                run.state["candidates"] = merge_candidates(records)
+                done.add(task)
+                run.state["queries_done"] = sorted(done)
+                run.event("query_completed", provider=provider, query=query, count=len(rows))
+            except Exception as exc:
+                # No request URL in diagnostics: optional provider keys can be query parameters.
+                run.event("query_failed", provider=provider, query=query, error=type(exc).__name__)
+    record_host_searches(run)
+    added = import_input_files(run, net, config.get("inputs", []))
+    if added:
+        records = list(run.state["candidates"])
     run.state["candidates"] = merge_candidates(records)
     if config.get("citation_hops", 0) and not run.state.get("citations_done"):
         for seed in run.state["candidates"][:min(3, len(run.state["candidates"]))]:
@@ -317,7 +420,8 @@ def discover(run, net):
     run.state["status"] = "awaiting_selection"
     run.save()
     write_json(run.path / "candidates.json", run.state["candidates"])
-    return {"run": str(run.path), "status": run.state["status"], "candidates": len(run.state["candidates"]), "next": "Read candidates.json; write selection.json with included [{id, reason}] and excluded [{id, reason}], then resume --selection FILE."}
+    pending = len(run.state.get("host_searches", []))
+    return {"run": str(run.path), "status": run.state["status"], "candidates": len(run.state["candidates"]), "host_searches": pending, **({"next": "Open each url in web_sources.json with the host's browsing tools, save the sites' own exports, then resume --run PATH --input FILE; afterwards write selection.json with included [{id, reason}] and excluded [{id, reason}] and resume --selection FILE."} if pending else {"next": "Read candidates.json; write selection.json with included [{id, reason}] and excluded [{id, reason}], then resume --selection FILE."})}
 
 
 def prepare_selected(run, mcp, net, selection=None):
@@ -339,7 +443,10 @@ def prepare_selected(run, mcp, net, selection=None):
     if not run.state["papers"]:
         raise ValueError("No selected papers; supply --selection")
     if not config.get("collection"):
-        config["collection"] = mcp.ensure_collection(config.get("collection_name") or config["topic"], config.get("library", 1))
+        # Topic collections nest under a dedicated parent (default "Agent") so the
+        # user's own collection tree stays untouched; empty value opts out to root.
+        parent = mcp.ensure_collection(config["parent_collection_name"], config.get("library", 1)) if config.get("parent_collection_name") else None
+        config["collection"] = mcp.ensure_collection(config.get("collection_name") or config["topic"], config.get("library", 1), parent=parent)
         run.save()
     for paper in run.state["papers"]:
         try:
@@ -357,6 +464,8 @@ def prepare_selected(run, mcp, net, selection=None):
                         paper["metadata_check_error"] = type(exc).__name__
                 result = mcp.import_paper(paper, config["collection"], config.get("library", 1))
                 paper["item_key"] = result["itemKey"]
+                paper["import_created"] = result.get("created", True)
+                paper["supplemented_fields"] = result.get("supplemented", [])
                 paper["status"] = "imported"
                 run.save()
             if paper["status"] not in ["awaiting_analysis", "published"]:

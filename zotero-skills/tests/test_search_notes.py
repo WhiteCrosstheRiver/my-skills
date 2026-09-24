@@ -7,7 +7,7 @@ import pymupdf
 
 from zotero_skills.core import Run, Network, digest, write_json, read_json
 from zotero_skills.notes import SECTIONS, note_template, render_markdown, validate_note
-from zotero_skills.search import Providers, collect_evidence, exported_records, merge_candidates, prepare_selected
+from zotero_skills.search import Providers, WEB_SEARCH_URLS, collect_evidence, discover, exported_records, import_input_files, merge_candidates, prepare_selected
 
 
 def evidence(level="fulltext"):
@@ -162,3 +162,64 @@ def test_pdf_page_locators(tmp_path):
     doc.save(path)
     pages = extract_pdf(path)
     assert pages[1]["page"] == 2 and "second" in pages[1]["text"]
+
+
+def test_host_assisted_providers_emit_urls_without_network(tmp_path):
+    run = Run.create(tmp_path, "deep-search", {"topic": "电解液 势函数", "queries": ["machine learning potential electrolyte"], "providers": ["scholar", "researchgate", "xmol"], "years": "2018-2026", "citation_hops": 0, "library": 1})
+    class Net:
+        def get(self, *args, **kwargs): raise AssertionError("host-assisted providers must not send HTTP")
+    result = discover(run, Net())
+    manifest = read_json(run.path / "web_sources.json")
+    urls = [s["url"] for s in manifest["searches"]]
+    assert len(urls) == 3 and result["host_searches"] == 3
+    assert "scholar.google.com/scholar" in urls[0] and "as_ylo=2018" in urls[0]
+    assert "researchgate.net/search" in urls[1] and "x-mol.com/paper/search" in urls[2]
+    assert run.state["status"] == "awaiting_selection"
+    # Re-running discovery must not duplicate host search tasks.
+    discover(run, Net())
+    assert len(read_json(run.path / "web_sources.json")["searches"]) == 3
+
+
+def test_web_query_escaping_and_yearless_url():
+    url = WEB_SEARCH_URLS["scholar"]('machine learning "electrolyte" ', None)
+    assert "q=machine+learning+%22electrolyte%22+" in url and "as_ylo" not in url
+
+
+def test_resume_input_merges_and_resolves_exports(tmp_path):
+    ris = tmp_path / "digest.ris"
+    ris.write_text("TY  - JOUR\nTI  - Unresolved Export Title\nDO  - 10.1/ABC\nER  - \n", encoding="utf-8")
+    run = Run.create(tmp_path, "deep-search", {"topic": "t", "queries": [], "providers": [], "citation_hops": 0, "library": 1})
+    class Net:
+        def get(self, url, params=None, **kwargs):
+            return {"message": {"title": ["Resolved Title"], "published": {"date-parts": [[2021]]}, "abstract": "<p>Resolved abstract</p>"}}
+    assert import_input_files(run, Net(), [ris]) == 1
+    paper = run.state["candidates"][0]
+    assert paper["title"] == "Resolved Title" and paper["verified_doi"] and paper["year"] == 2021
+    assert paper["abstract"] == "Resolved abstract"
+    # Merging the same file twice must not duplicate candidates.
+    assert import_input_files(run, Net(), [ris]) == 0
+    assert len(run.state["candidates"]) == 1
+
+
+def test_topic_collection_nests_under_parent(tmp_path):
+    calls = []
+    class Client:
+        def ensure_collection(self, name, library=1, parent=None):
+            calls.append((name, parent))
+            return "PARENT" if name == "Agent" else "TOPIC"
+        def snapshot(self, *a): raise AssertionError("no item work expected")
+    run = Run.create(tmp_path, "deep-search", {"topic": "专题", "parent_collection_name": "Agent", "library": 1})
+    run.state["papers"] = [{"id": "p", "title": "Paper", "item_key": "ABCD1234", "status": "published"}]
+    prepare_selected(run, Client(), None)
+    assert calls == [("Agent", None), ("专题", "PARENT")] and run.state["config"]["collection"] == "TOPIC"
+
+
+def test_empty_parent_creates_topic_at_root(tmp_path):
+    calls = []
+    class Client:
+        def ensure_collection(self, name, library=1, parent=None):
+            calls.append((name, parent)); return "TOPIC"
+    run = Run.create(tmp_path, "deep-search", {"topic": "专题", "parent_collection_name": "", "library": 1})
+    run.state["papers"] = [{"id": "p", "title": "Paper", "item_key": "ABCD1234", "status": "published"}]
+    prepare_selected(run, Client(), None)
+    assert calls == [("专题", None)]

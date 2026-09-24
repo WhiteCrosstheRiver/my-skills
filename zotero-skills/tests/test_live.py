@@ -62,3 +62,29 @@ def test_live_import_missing_pdf_idempotence_and_manual_notes():
     assert fourth['markdown_attachment_key'] != old_md['key']
     assert '人工修改' in Path(old_md['path']).read_text(encoding='utf-8')
     write_json(run.path / "acceptance.json", {"passed": True, "checks": ["real_import", "metadata_survives_failed_pdf", "resume_after_import", "import_idempotence", "note_idempotence", "md_idempotence", "manual_note_preserved", "manual_edit_preserved"], "item_key": paper["item_key"]})
+
+
+def test_live_reuse_supplements_empty_fields_and_keeps_user_data():
+    mcp = MCP()
+    token = uuid.uuid4().hex[:10]
+    collection = mcp.ensure_collection("Zotero Skills Tests - Integration")
+    # Simulate an existing, sparsely populated library entry created by the user.
+    existing = mcp.js(r"""
+const i=new Zotero.Item('journalArticle');i.libraryID=1;i.setField('title','[Zotero Skills TEST] sparse entry '+P.token);i.setField('date','2026');i.setField('abstractNote','用户自己写的摘要，必须保留。');i.setCreators([{name:'用户手动录入',creatorType:'author'}]);await i.saveTx();return i.key;
+""", token=token)
+    paper = {"id": "supp" + token, "title": "[Zotero Skills TEST] sparse entry " + token, "year": 2026, "doi": "10.59999/test." + token, "abstract": "补全用的合成摘要。", "authors": ["用户手动录入", "补全作者"], "venue": "Journal of Test Fixtures", "status": "selected"}
+    result = mcp.import_paper(paper, collection)
+    assert result["itemKey"] == existing and result["created"] is False
+    assert set(result["supplemented"]) >= {"DOI", "publicationTitle"} and "abstractNote" not in result["supplemented"]
+    snap = mcp.snapshot(existing)
+    assert snap["item"]["abstractNote"] == "用户自己写的摘要，必须保留。"
+    assert any(c["name"] == "用户手动录入" for c in snap["item"]["creators"])
+    assert "10.59999/test." + token in snap["item"]["DOI"].lower()
+    # Repeat import: idempotent, nothing left to supplement.
+    again = mcp.import_paper(paper, collection)
+    assert again["itemKey"] == existing and again["supplemented"] == []
+    # New item goes to My Library root plus the topic collection.
+    coll_key = mcp.ensure_collection("Zotero Skills Tests - Integration")
+    membership = mcp.js("const x=await Zotero.Items.getByLibraryAndKeyAsync(1,P.key);return x.getCollections().map(id=>Zotero.Collections.get(id).key);", key=existing)
+    assert coll_key in membership
+    write_json(default_output() / "validation" / ("supplement-" + token + ".json"), {"passed": True, "item_key": existing, "supplemented": result["supplemented"]})

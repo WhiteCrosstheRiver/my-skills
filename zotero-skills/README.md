@@ -25,7 +25,8 @@ python -m venv .venv
 | 命令 | 用途 |
 |---|---|
 | `doctor` | 检查本机连接、权限、版本，不打印凭据 |
-| `deep-search --topic "领域" --query "扩展检索式" --years 2015:2026 --limit 100` | 多源检索与引文扩展；按相关性选择后导入、获取全文 |
+| `deep-search --topic "领域" --query "扩展检索式" --years 2018-2026 --limit 100` | 多源检索与引文扩展；默认含 Google Scholar / X-MOL 宿主协作源（ResearchGate 需 `--providers researchgate` 显式开启，登录墙繁琐不建议）（生成 `web_sources.json` 检索链接，宿主读取后经 `--input` 合并）；选择策略宁全勿缺，间接相关默认保留 |
+| `resume --run PATH --input FILE [--input FILE2]` | 把宿主采集的 Scholar BibTeX、ResearchGate RIS、X-MOL/网页采集的 DOI/Markdown 列表合并进候选池（Crossref 校验 DOI，自动去重） |
 | `resume --run PATH --selection selection.json` | 按已有任务继续入库和整理证据 |
 | `note-template --run PATH --paper ID` | 创建待分析模板；不是完成的笔记 |
 | `publish-note --run PATH --paper ID` | 校验并发布宿主完成的详细笔记 |
@@ -35,7 +36,11 @@ python -m venv .venv
 | `review --publish --run PATH` | 发布独立审查通过的综述、离线HTML与完整证据包 |
 | `resume --run PATH --retry-errors` | 根据任务类型恢复；不会将等待人工分析当成已完成 |
 
-全局 `--output` / `--url` 位于命令前。收藏夹参数为 Zotero key，CLI错误信息会说明缺失范围。`distill --topic` 是短语匹配；语义领域筛选由宿主扩展并整理收藏夹。深度检索支持 Scholar BibTeX、Paper Digest RIS/Markdown 导出文件，使用 `--input FILE`。
+全局 `--output` / `--url` 位于命令前。收藏夹参数为 Zotero key，CLI错误信息会说明缺失范围。`distill --topic` 是短语匹配；语义领域筛选由宿主扩展并整理收藏夹。深度检索支持 Scholar BibTeX、ResearchGate RIS、X-MOL/网页采集的 DOI/Markdown 列表，使用 `--input FILE`。
+
+收藏夹布局：专题收藏夹默认嵌套在「我的文献 → Agent」父收藏夹下（`--parent-collection-name`，默认 `Agent`，传空字符串则在根层创建），不会打乱你手工设计的收藏夹树。
+
+导入规则：库中已有同一文献（DOI/arXiv/标题匹配）时复用该条目，只补全空缺的元数据字段（DOI、年份、摘要、URL、期刊、作者）并下载缺失的 PDF，**绝不覆盖**用户已有的任何字段、笔记与附件；库中没有时新增条目——新条目位于「我的文献」根层并额外加入主题收藏夹。
 
 综述保留参考长篇HTML的章节逻辑、逐章引证和证据矩阵；视觉参考 [Apple Support](https://support.apple.com/)，采用白底、清晰层级和蓝色导航。KaTeX随包分发，离线不访问CDN。请复制整个版本目录或解压 Zotero 的离线ZIP，再打开 `review.html`，不要只复制单个HTML文件。
 

@@ -247,6 +247,8 @@ return {item:x.toJSON(), notes: await Promise.all(x.isRegularItem()?x.getNotes()
 
     def import_paper(self, paper, collection, library=1):
         # Marker recovers a timed-out create even for items without a DOI.
+        # Reuse never overwrites: an existing entry is supplemented field-by-field
+        # only where empty, so user-curated metadata stays untouched.
         result = self.js(r"""
 const coll=await Zotero.Collections.getByLibraryAndKeyAsync(P.library,P.collection);
 if(!coll)throw new Error('Target collection missing');
@@ -257,10 +259,16 @@ const doi=v=>String(v||'').trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\
 const norm=v=>String(v||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 let x=items.find(i=>!i.deleted&&((P.paper.doi&&doi(i.getField('DOI'))===doi(P.paper.doi))||i.hasTag(marker)||(P.paper.arxiv&&i.getField('url').includes('arxiv.org/abs/'+P.paper.arxiv))));
 if(!x) x=items.find(i=>!i.deleted&&norm(i.getField('title'))===norm(P.paper.title)&&String(i.getField('date')).slice(0,4)===String(P.paper.year||'').slice(0,4)&&(!P.paper.authors?.length||norm(JSON.stringify(i.getCreators())).includes(norm(P.paper.authors[0].split(' ').at(-1)))));
-let created=false;
+let created=false, supplemented=[];
 await Zotero.DB.executeTransaction(async()=>{
 if(!x){x=new Zotero.Item('journalArticle');x.libraryID=P.library;x.setField('title',P.paper.title);if(P.paper.doi)x.setField('DOI',P.paper.doi);if(P.paper.year)x.setField('date',String(P.paper.year));if(P.paper.abstract)x.setField('abstractNote',P.paper.abstract);if(P.paper.url)x.setField('url',P.paper.url);if(P.paper.venue)x.setField('publicationTitle',P.paper.venue);x.setCreators((P.paper.authors||[]).map(name=>({name,creatorType:'author'})));x.addTag(marker);created=true;}
-x.addToCollection(coll.id);await x.save();});return {itemKey:x.key,created};
+else{
+const setIfEmpty=(field,value)=>{if(value&&!x.getField(field)){x.setField(field,value);supplemented.push(field);}};
+setIfEmpty('DOI',P.paper.doi);setIfEmpty('date',P.paper.year?String(P.paper.year):'');setIfEmpty('abstractNote',P.paper.abstract);setIfEmpty('url',P.paper.url);setIfEmpty('publicationTitle',P.paper.venue);
+if(P.paper.authors?.length&&!x.getCreators().length){x.setCreators(P.paper.authors.map(name=>({name,creatorType:'author'})));supplemented.push('creators');}
+}
+// New items live in My Library (root) and additionally join the topic collection.
+x.addToCollection(coll.id);await x.save();});return {itemKey:x.key,created,supplemented};
 """, paper=paper, identity=digest(paper.get("doi") or paper.get("arxiv") or paper["title"])[:24], collection=collection, library=library)
         return result
 

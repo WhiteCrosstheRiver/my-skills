@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 from .core import write_lock_path
 from .core import MCP, Network, Run, default_output, lock, read_json
-from .search import discover, prepare_selected
+from .search import discover, import_input_files, prepare_selected
 from .notes import note_template, publish
 
 
@@ -20,8 +21,8 @@ def parser():
     search = sub.add_parser("deep-search", help="Discover candidates; selection and analysis are performed by the host agent")
     search.add_argument("--topic", required=True)
     search.add_argument("--query", action="append", dest="queries")
-    search.add_argument("--providers", nargs="+", choices=["semantic", "crossref", "arxiv", "europepmc", "openalex"], default=["semantic", "crossref", "arxiv"])
-    search.add_argument("--years")
+    search.add_argument("--providers", nargs="+", choices=["semantic", "crossref", "arxiv", "europepmc", "openalex", "scholar", "researchgate", "xmol"], default=["semantic", "crossref", "arxiv", "scholar", "xmol"], help="scholar/researchgate/xmol are host-assisted: search URLs are emitted to web_sources.json, never scraped")
+    search.add_argument("--years", help="Inclusive range with a hyphen, e.g. 2018-2026")
     search.add_argument("--limit", type=int, default=100)
     search.add_argument("--candidate-limit", type=int, default=100)
     search.add_argument("--citation-hops", type=int, choices=[0, 1], default=1)
@@ -29,9 +30,11 @@ def parser():
     search.add_argument("--library", type=int, default=1)
     search.add_argument("--collection")
     search.add_argument("--collection-name")
+    search.add_argument("--parent-collection-name", default="Agent", help="Topic collections nest under this parent collection (default Agent); pass empty string to create at library root")
     resume = sub.add_parser("resume")
     resume.add_argument("--run", type=Path, required=True)
     resume.add_argument("--selection", type=Path)
+    resume.add_argument("--input", action="append", dest="inputs", default=[], help="Merge host-collected .bib/.ris/.md export files into the candidate pool first")
     resume.add_argument("--discover", action="store_true")
     resume.add_argument("--retry-errors", action="store_true")
     resume.add_argument("--restore", action="store_true", help="Restore prepared, unmerged dedup children")
@@ -55,12 +58,18 @@ def parser():
 
 def execute(args):
     if args.command == "doctor":
-        return MCP(args.url).doctor()
+        result = MCP(args.url).doctor()
+        from .search import probe_sources
+        result["sources"] = probe_sources(Network(args.output / "cache"))
+        return result
     if args.command == "status":
         return Run(args.run).state
     if args.command == "deep-search":
         if args.limit < 1 or args.candidate_limit < 1:
             raise ValueError("Limits must be positive")
+        if args.years:
+            # Accept 2018:2026 or 2018-2026; provider adapters require the hyphen form.
+            args.years = re.sub(r"[;:~至]", "-", args.years)
         config = {k: v for k, v in vars(args).items() if k not in ["output", "url", "command"]}
         run = Run.create(args.output, "deep-search", config)
         with lock(run.path / ".lock"):
@@ -85,6 +94,11 @@ def execute(args):
                 raise ValueError('--restore applies only to a dedup recovery manifest')
             if run.state["mode"] == "deep-search":
                 net = Network(args.output / "cache")
+                if args.inputs:
+                    with lock(write_lock_path()):
+                        added = import_input_files(run, net, args.inputs)
+                    if not args.discover and not args.selection:
+                        return {"run": str(run.path), "merged_inputs": added, "candidates": len(run.state["candidates"]), **({"next": "All input files were already merged."} if not added else {"next": "Open any remaining web_sources.json urls, then write selection.json with included [{id, reason}] and resume --selection FILE."})}
                 if args.discover:
                     return discover(run, net)
                 with lock(write_lock_path()):
