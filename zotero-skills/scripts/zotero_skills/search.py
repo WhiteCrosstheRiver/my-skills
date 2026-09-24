@@ -231,6 +231,29 @@ def extract_pdf(path):
     return pages
 
 
+def oa_pdf_urls(paper, net):
+    """Second download chain: resolve legal open-access copies by DOI via OpenAlex.
+
+    Legitimate OA locations only (repositories, preprints, publisher OA). Never
+    shadow libraries or access-control bypasses; failures return quietly.
+    """
+    ident = doi(paper.get("doi"))
+    if not ident:
+        return []
+    import os
+    params = {"mailto": os.environ.get("ZOTERO_SKILLS_CONTACT_EMAIL", "zotero-skills@example.org")}
+    try:
+        data = net.get("https://api.openalex.org/works/doi:" + ident, params)
+    except Exception:
+        return []
+    urls = []
+    best = data.get("best_oa_location") or {}
+    for loc in [best] + (data.get("locations") or []):
+        if isinstance(loc, dict) and loc.get("pdf_url"):
+            urls.append(loc["pdf_url"])
+    return list(dict.fromkeys(urls))
+
+
 def collect_evidence(run, paper, mcp, net):
     directory = run.paper_dir(paper)
     library = run.state["config"].get("library", 1)
@@ -249,7 +272,11 @@ def collect_evidence(run, paper, mcp, net):
             except Exception as exc:
                 failures.append({"source": attachment["key"], "reason": type(exc).__name__ + ": " + str(exc)})
     if not pages:
-        urls = list(dict.fromkeys(paper.get("pdf_urls", []) + (["https://arxiv.org/pdf/" + paper["arxiv"]] if paper.get("arxiv") else [])))
+        # Chain 1: provider links and arXiv. Chain 2: legal OA resolution by DOI.
+        oa = oa_pdf_urls(paper, net)
+        urls = list(dict.fromkeys(paper.get("pdf_urls", []) + (["https://arxiv.org/pdf/" + paper["arxiv"]] if paper.get("arxiv") else []) + oa))
+        if oa:
+            paper.setdefault("sources", []).append({"provider": "oa-resolver", "candidates": oa, "at": now()})
         for url in urls:
             try:
                 content = net.get(url, json_data=False, cache=False)

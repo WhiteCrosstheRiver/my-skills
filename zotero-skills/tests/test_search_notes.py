@@ -7,7 +7,7 @@ import pymupdf
 
 from zotero_skills.core import Run, Network, digest, write_json, read_json
 from zotero_skills.notes import SECTIONS, note_template, render_markdown, validate_note
-from zotero_skills.search import Providers, WEB_SEARCH_URLS, collect_evidence, discover, exported_records, import_input_files, merge_candidates, prepare_selected
+from zotero_skills.search import Providers, WEB_SEARCH_URLS, collect_evidence, discover, exported_records, import_input_files, merge_candidates, oa_pdf_urls, prepare_selected
 
 
 def evidence(level="fulltext"):
@@ -223,3 +223,41 @@ def test_empty_parent_creates_topic_at_root(tmp_path):
     run.state["papers"] = [{"id": "p", "title": "Paper", "item_key": "ABCD1234", "status": "published"}]
     prepare_selected(run, Client(), None)
     assert calls == [("专题", None)]
+
+
+def test_oa_resolver_parses_and_dedups_openalex_locations():
+    class Net:
+        def get(self, url, params=None, **kwargs):
+            assert url.startswith("https://api.openalex.org/works/doi:")
+            return {"best_oa_location": {"pdf_url": "https://repo/a.pdf", "is_oa": True},
+                    "locations": [{"pdf_url": "https://repo/a.pdf"}, {"pdf_url": "https://pub/b.pdf"}, {"pdf_url": None}]}
+    assert oa_pdf_urls({"doi": "10.1/ABC"}, Net()) == ["https://repo/a.pdf", "https://pub/b.pdf"]
+    assert oa_pdf_urls({"doi": ""}, Net()) == []
+
+
+def test_collect_evidence_falls_back_to_oa_chain(tmp_path):
+    class Client:
+        def snapshot(self, *args): return {"item": {"title": "Paper", "abstractNote": "abstract"}, "notes": [], "attachments": []}
+        def attach(self, *args): return {"key": "ATT1"}
+    class Net:
+        def get(self, url, params=None, json_data=True, cache=True, headers=None):
+            if url.startswith("https://api.openalex.org/"):
+                return {"best_oa_location": {"pdf_url": "https://repo/real.pdf"}, "locations": []}
+            if "test.invalid" in url:
+                import httpx
+                raise httpx.HTTPStatusError("404", request=None, response=httpx.Response(404))
+            import io
+            doc = pymupdf.open()
+            pg = doc.new_page()
+            for i in range(40):
+                pg.insert_text((50, 50 + i * 14), f"OA full text page line {i} with evidence sentence.")
+            
+            buf = io.BytesIO(); doc.save(buf)
+            return buf.getvalue()
+    run = Run.create(tmp_path, "deep-search", {"library": 1})
+    p = {"title": "Paper", "item_key": "ABCD1234", "doi": "10.1/abc", "pdf_urls": ["https://test.invalid/f"], "status": "imported"}
+    run.state["papers"] = [p]
+    result = collect_evidence(run, p, Client(), Net())
+    assert result["level"] == "fulltext"
+    assert any(s.get("url") == "https://repo/real.pdf" for s in result["sources"])
+    assert any(s["provider"] == "oa-resolver" for s in p["sources"])
