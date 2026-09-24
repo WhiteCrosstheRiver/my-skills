@@ -16,7 +16,12 @@ python scripts/zotero_cli.py resume --run PATH --input scholar.bib --input diges
 
 Merged entries are DOI-resolved against Crossref and deduplicated into candidates.json; re-merging the same file is a no-op. Search coverage is only complete after every `web_sources.json` URL has been read this way or its failure is recorded.
 
-**Selection policy: recall before precision.** Indirectly related candidates (adjacent materials, neighboring methods, applied-domain variants) often open new research directions; do not exclude them as redundancy. Include every candidate a careful reader would want to see summarized; reserve `excluded` for true noise (peer-reviewDecision-letter fragments, duplicate records, off-domain hits). Selection may use the full `--limit` budget.
+**Selection policy: recall before precision — 应得尽得，全量入库。** Indirectly related candidates (adjacent materials, neighboring methods, applied-domain variants) often open new research directions; do not exclude them as redundancy. **The default is to import every relevant candidate into Zotero**; the candidate pool exists to be collected, not to be skimmed for a hand-picked few. Rules:
+
+1. `--limit` is the discovery/selection budget — set it high enough to cover the whole relevant candidate pool (`--limit 500` for a normal topic scan), never a convenience cap for a demo. A pool of N relevant candidates must yield ~N imported items, not a curated subset.
+2. Reserve `excluded` for **true noise only** (off-domain keyword hits, duplicate records, editor letters, non-scientific items). Every exclusion gets an individual, specific reason; batch exclusions with a blanket rationale are not acceptable for on-topic candidates. When in doubt, include — an extra library item costs nothing, a missing one silently biases later reviews.
+3. Distill/review depth is decoupled from import: import everything relevant first, then choose which items to distill into notes. "固定集合专题综述" describes the **distilled** subset, never the library scope; the full pool stays in the collection for future expansion and snowballing.
+4. After import, verify: the Zotero collection item count must equal (included − pre-existing duplicates); report the number. A large gap between pool size and imported count requires justification in the run report.
 
 Read candidates.json. Write selection.json with `included: [{id, reason}]` and `excluded: [{id, reason}]`; reasons must describe relevance, not citation count alone. Record query scope and missing providers. Then:
 
