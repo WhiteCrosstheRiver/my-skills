@@ -16,7 +16,7 @@ def evidence(level="fulltext"):
 
 def valid_note(e):
     s = note_template(e).replace("status: draft", "status: complete")
-    s = s.replace("待填写：依据 evidence.json，缺失信息明确说明。", "逐项阅读所得；全文不可得时仅使用摘要。[C1]")
+    s = s.replace("待填写：依据 evidence.json，缺失信息明确说明。", "逐项阅读所得；全文不可得时仅使用摘要；误差降低 20%。[C1]")
     ref = {"source": "PDF00001", "page": 2, "excerpt": "reduces the test error by 20 percent"} if e["level"] == "fulltext" else {"source": "abstract", "excerpt": "abstract with a clear limitation"}
     return s, [{"id": "C1", "kind": "reported", "statement": "A limited result", "evidence": [ref]}]
 
@@ -32,17 +32,19 @@ def test_title_collision_does_not_merge_different_dois():
     assert len(merge_candidates([{"title": "Same", "year": 2020, "doi": "10.1/a"}, {"title": "Same", "year": 2020, "doi": "10.1/b"}])) == 2
 
 
-def test_semantic_pagination():
+def test_semantic_relevance_search_pages_by_offset():
     class Net:
         def __init__(self): self.calls = []
         def get(self, url, params, **kwargs):
+            assert url.endswith("/graph/v1/paper/search")
             self.calls.append(params)
-            start = 1000 if params.get("token") else 0
-            return {"data": [{"title": f"Paper {i}", "externalIds": {"DOI": f"10.1/{i}"}} for i in range(start, start + 1000)], "token": "page2" if start == 0 else None}
+            start = params["offset"]
+            return {"data": [{"title": f"Paper {i}", "externalIds": {"DOI": f"10.1/{i}"}} for i in range(start, start + params["limit"])], "next": start + params["limit"]}
     net = Net()
-    results = Providers(net).semantic("topic", 1201)
-    assert len(results) == 1201 and results[-1]["title"] == "Paper 1200"
-    assert len(net.calls) == 2 and net.calls[1]["token"] == "page2"
+    results = Providers(net).semantic("topic", 250)
+    assert len(results) == 250 and results[-1]["title"] == "Paper 249"
+    assert [c["offset"] for c in net.calls] == [0, 100, 200] and "sort" not in net.calls[0]
+    assert len(Providers(Net()).semantic("topic", 5000)) == 1000  # API ceiling respected
 
 
 def test_crossref_pagination():
@@ -89,7 +91,7 @@ def test_template_cannot_be_published():
 
 def test_whitespace_only_sections_are_not_complete():
     e = evidence(); note, claims = valid_note(e)
-    note = note.replace('## 核心贡献\n\n逐项阅读所得；全文不可得时仅使用摘要。[C1]', '## 核心贡献\n\n   ')
+    note = note.replace('## 核心思路\n\n逐项阅读所得；全文不可得时仅使用摘要；误差降低 20%。[C1]', '## 核心思路\n\n   ')
     with pytest.raises(ValueError, match='Empty section'): validate_note(note, claims, e)
 
 
@@ -251,10 +253,11 @@ def test_collect_evidence_falls_back_to_oa_chain(tmp_path):
                 raise httpx.HTTPStatusError("404", request=None, response=httpx.Response(404))
             import io
             doc = pymupdf.open()
-            pg = doc.new_page()
-            for i in range(40):
-                pg.insert_text((50, 50 + i * 14), f"OA full text page line {i} with evidence sentence.")
-            
+            for n in range(5):
+                pg = doc.new_page()
+                for i in range(40):
+                    pg.insert_text((50, 50 + i * 14), f"OA full text page {n} line {i} with evidence sentence.")
+
             buf = io.BytesIO(); doc.save(buf)
             return buf.getvalue()
     run = Run.create(tmp_path, "deep-search", {"library": 1})

@@ -1,34 +1,98 @@
-# Detailed per-paper analysis
+# 单篇笔记：深度跟着证据走
 
-Read evidence.json and the **whole** page-labeled fulltext.txt before analyzing an available paper. Check actual PDF identity against metadata. Extra PDFs may be supplements; preserve their source keys. User annotations are context, not automatically the paper's conclusions. If code is relevant, inspect its real repository/documentation read-only and append fetched source text, URL and retrieval time to `external_sources` in evidence.json before computing source_hash. Never execute downloaded repository code as part of note generation.
+一篇笔记的价值在于它能被后来的综述**直接引用**。所以笔记的深度由实际拿到的证据决定：拿到全文就精读，只有摘要就写一份诚实的简报，只有元数据就留一个占位条目。不要把摘要撑成 13 栏的“未报告”，也不要对全文做一遍同样模板化的填空。
 
-`note-template --run PATH --paper ID` creates an explicitly unfinished draft and will not overwrite an existing note. Fill all 13 sections. Match the supplied sample's depth: explain study logic, equations and symbols, procedures, controls, materials, data splits, parameters with units, quantitative comparisons and limits. Include affiliations only when sourced. For code report repository URL, version/license when found, reusable components and whether reproduction was actually tested. Do not call untested code “verified” or infer author roles from name order.
+## 0. 先分诊，再动笔
 
-Frontmatter: schema, item_key, library_id, doi, evidence_level, status, generated_at, source_hash, analyst. Set `status: complete` only after real analysis. The source hash is SHA256 of `json.dumps(evidence, sort_keys=True, ensure_ascii=False).encode('utf-8')`. Evidence levels: `fulltext`, `abstract`, `metadata`. Missing facts should say 未报告/未验证/全文不可得. Fulltext unavailable notes must not infer experimental parameters from a title or abstract.
+`resume --selection` / `distill` 结束后先读 run 目录下的 `triage.md`（也可 `triage --run PATH` 重新生成）。它按 `evidence.json` 的 `level` 分组：
 
-**作者与团队检索（必做，但与证据等级分离）**：用宿主检索工具调查通讯/核心作者的课题组、领域代表作、与本文软件/方法/数据集的维护关系；每条信息先把网页文本（含 URL 与检索时间）追加进 evidence.json 的 `external_sources`（`{"id": "E1", "url": "...", "title": "...", "retrieved_at": "...", "text": "..."}`），重算 source_hash 后才能以该 ID 引用（摘录逐字校验）。区分**方法开发、合作应用、外部采用与独立复现**四种角色。团队规模、名望、期刊与被引量是背景资料，**不得直接提高科学声明的证据等级**——它们只影响综述中的组织权重，不改变 claim 的 kind 与证据强度。查不到写 未报告/未验证，不得虚构头衔、h 指数或团队规模。
+| level | 含义（程序判定） | 默认 note_tier | 可选 |
+|---|---|---|---|
+| `fulltext` | ≥ 8000 字符且 ≥ 3 页可读文本 | `deep` | `brief` |
+| `partial` | 有 PDF 文本但偏短（首页、摘要页、扫描件局部） | `deep` | `brief` |
+| `abstract` | 只有摘要 | `brief` | — |
+| `metadata` | 只有题名等书目信息 | `stub` | — |
 
-**蒸馏质量：保留推理依据，而非仅压缩摘要**。笔记的目标是生成可供跨文献分析复用的证据记录；不得以篇幅、栏目填满、作者影响力或引用数代替分析完成度。
+**动笔前先尝试升级**：`abstract`/`metadata`/`partial` 条目，先用宿主的合法途径（机构访问、作者主页、arXiv/ChemRxiv、PMC）找全文；拿到后附到 Zotero 条目或写 verified links 用 `fetch-pdfs --links`，再运行 `resume --run PATH --refresh-evidence` 重新收集证据（`fetch-pdfs` 下载成功的条目会被自动刷新）。升级一篇的收益远大于为它写一份更长的简报。
 
-- **来源与版本**：识别论文、预印本各版本、正式发表版、补充材料、数据与代码之间的关系；记录实际使用的来源版本。发现正式版与所读版本不同，报告差异，不得静默替换书目信息或混写不同版本的结果。
-- **内容覆盖**：写笔记前建立覆盖记录——「已读取文字」「已检查图表」「已核对代码」「已实际复现」分别记录，不得互相替代；缺失部分明确写未取得、未检查或未报告（可记在证据索引栏或宿主自建的辅助记录，不强求新文件格式）。
-- **读前分诊（记法随文体）**：实证/计算型文章抓研究问题、（显式或隐式的）假设、方法与测量、关键发现四要素；理论/综述型文章抓主旨、支撑论证的组成、框架的核心命题。两种文体都有：将来可引用的观点、可复用的方法、设计上的不足与改进设想、让你想到的同类或相反结论的其他文献、你自己的 critique——这些记入「研究启发」与「局限与矛盾」，不代替论文内容。
-- **方法解释**：核心方法保留输入与输出、关键步骤、关键公式及符号、参数作用、假设、相对基线的具体变化、可复用部分和必要验证；方法名与软件名不能替代过程解释。
-- **原子化声明**：每条 claim 尽量对应一个可独立判断真假的命题；区分直接结果、作者解释、分析者推断和待验证假设；保留作者原有的条件、比较对象和不确定措辞，不得增强结论强度。
-- **数字与证据**：数字必须绑定指标定义、单位、对象、实验/计算条件及来源位置。表格证据需覆盖行列、表头、单位和必要脚注；图形证据需实际检查图例、坐标轴、误差定义和相关正文——仅有图表标题，不得标记为数值已核验。
-- **边界与反证**：明确记录作者承认的局限、观察到的失败、可能的替代解释、未检验范围，以及不能由本结果推出的结论。没有发现反例不等于不存在反例；不强行编造争议。
-- **审查**：关键结论的核验必须回到原始来源（原文页/表/图/代码），不得仅对照自己生成的摘要；证据不足时降低措辞或标记待核验，不得用无关引用补齐。
+**全文也可以只写简报**：一个 run 有几十上百篇时，只对核心锚点（通常 10–20 篇：方法奠基、最强结果、互相矛盾的几篇）写 `deep`，其余全文条目用 `note-template --tier brief`。在 `evidence_level` 不变的情况下，`note_tier` 表明你**选择**读多深，这对综述是诚实的信息。
 
-Required second-level sections: 文献身份与摘要；背景与研究问题；核心贡献；实验与论证思路；关键方法与过程；公式与参数；结果与对照；结论与适用边界；局限与矛盾；作者与团队；代码、数据与复现；研究启发；证据索引与生成记录。
+## 1. 三种笔记
 
-Use inline evidence IDs such as `[C1]` alongside important claims. Save claims.json:
+`note-template --run PATH --paper ID [--tier …]` 生成对应骨架（schema 2）。所有栏必须写实；不适用就一句话说明原因（如“不适用：纯理论推导，无代码”）。
+
+### deep：精读（9 栏）
+
+| 栏 | 写什么 |
+|---|---|
+| 一句话结论 | ≤160 字，一句话。**谁、在什么条件下、做成了什么、好多少**。不许用“新颖/具有重要意义/提供了新思路/填补空白”。 |
+| 问题与动机 | 之前的方法卡在哪里；作者的（显式或隐式）假设。 |
+| 核心思路 | 真正新的那一个想法，相对最强基线**改了什么**。方法名、软件名不能代替解释。 |
+| 方法要点 | 输入→关键步骤→输出；关键公式与符号含义；决定结果的参数（带单位）；数据来源与划分。 |
+| 关键结果 | 用表格。每个数字绑定指标定义、单位、对象、条件与页码/表号。没有定量结果写“无定量结果”并说明论证方式。 |
+| 边界与疑点 | 作者承认的局限；你看到的失败案例、替代解释、未检验范围、不能外推的结论。不强行制造争议。 |
+| 代码、数据与复现 | 仓库/数据链接、版本与许可证（如能查到）；是否**实际**复现（未运行就写未运行）。 |
+| 关联与启发 | 与库中哪几篇互相支持或矛盾（写 item key 或第一作者+年份）；可复用的方法；值得做的后续实验。 |
+| 证据索引 | 读了哪些页、哪些图表、哪些补充材料；没读到的部分；所用版本（预印本/正式版）。 |
+
+### brief：简报（5 栏，正文 ≤1800 字）
+
+| 栏 | 写什么 |
+|---|---|
+| 一句话结论 | 同上，但以“作者报告”为主语。 |
+| 作者声称 | 摘要中可核查的主要声明，保留原有限定词；有数字就照抄数字。 |
+| 方法定位 | 属于哪个方法家族，相对已知路线的差异（只写摘要支持的）。 |
+| 可信度与待核 | 缺什么证据才能相信它；读全文时要先查哪一点。必须声明“仅摘要/全文未取得”。 |
+| 关联与启发 | 它应归到综述的哪一簇，和哪些已精读论文相关。 |
+
+### stub：占位（3 栏，正文 ≤600 字）
+
+一句话定位（由题名/期刊能确定的内容）、纳入理由、补全途径（DOI 链接、预印本线索、需要谁的访问权限）。不推断任何研究结论。
+
+## 2. 写得好 vs 写得差
+
+同一篇（虚构示例，数字仅作演示）的“一句话结论”：
+
+- 差：本文提出了一种新颖的等变神经网络势函数，具有重要意义，为分子模拟提供了新思路。
+- 好：在 rMD17 的 10 个分子上，作者的等变势用 1000 个构型训练即把力误差降到 6–13 meV/Å，约为此前最佳不变模型的一半（表 1，p.6）[C3]。
+
+差的版本换到任何一篇论文上都成立；好的版本只属于这一篇。整份笔记都按这个标准写：**删掉任何一句换一篇论文仍然成立的话。**
+
+其他约定：
+
+- 数字优于形容词；比较必须写出比较对象。
+- 区分“作者报告 / 作者解释 / 我的推断”，推断标“[推断]”。
+- 作者的限定词（“在所测体系中”“可能”）不能在笔记里消失。
+- 图只看了标题不算核验了数值。
+- 长度不是质量：deep 笔记通常 1500–4000 字即可；超过时先删重复与背景铺陈。
+
+## 3. 证据与 claims.json
+
+先通读 `evidence.json` 与带页码的 `fulltext.txt`，核对 PDF 身份与元数据一致；多余 PDF 可能是补充材料，保留其 source key。用户批注是上下文，不自动等于论文结论。
 
 ```json
 [
-  {"id":"C1","kind":"reported","statement":"Your accurate paraphrase", "evidence":[{"source":"PDF_ATTACHMENT_KEY","page":3,"excerpt":"A short exact passage from that page"}]}
+  {"id":"C1","kind":"reported","statement":"准确的转述","evidence":[{"source":"PDF_ATTACHMENT_KEY","page":3,"excerpt":"该页中的一小段原文"}]}
 ]
 ```
 
-Kinds: reported, inference, limitation, metadata. Sources: a PDF attachment key + page, `abstract`, `metadata`, or an explicitly stored external_source ID. Excerpts must exist verbatim after whitespace normalization; keep quotes short. Automated matching checks provenance, not entailment: independently check that each cited source supports the **actual numeric/directional claim**, and distinguish your inference from authors' claims.
+- kind：`reported`、`inference`、`limitation`、`metadata`。
+- source：PDF 附件 key + 页码（仅 `fulltext`/`partial`）、`abstract`、`metadata`，或已写入 `external_sources` 的 ID。
+- 摘录须在规范化空白后逐字存在，尽量短。程序只校验出处存在，不校验蕴含关系：你要自己确认引文**确实支持**该数值和方向。
+- 正文中重要论断旁标 `[C1]`；每个 claim 至少被引用一次。
 
-Publish with `publish-note --run PATH --paper ID`. It validates the note, creates an immutable child-note version, attaches Markdown, reads it back and archives source/provenance. Repeating identical content reuses the same version; a human edit to a tagged note is preserved and a new version is created. Complete all selected papers before reporting the whole run complete.
+## 4. 作者与团队（可选）
+
+只在它影响判断时做：例如软件/数据集的维护者身份、方法开发者与外部复现者的区分、结论存在争议时。先把网页文本（URL、检索时间）追加进 `evidence.json` 的 `external_sources`（`{"id":"E1","url":"…","title":"…","retrieved_at":"…","text":"…"}`），重算 source_hash 后再引用。团队名望、期刊、被引量不提高声明的证据等级。查不到就不写，不虚构头衔或 h 指数。brief/stub 一般不做。
+
+## 5. 代码
+
+相关时只读方式检查真实仓库/文档，把抓取的文本、URL、时间追加到 `external_sources`。不执行下载的仓库代码；未运行不写“已验证”。
+
+## 6. Frontmatter 与发布
+
+frontmatter：`schema: 2`、item_key、library_id、doi、evidence_level、note_tier、status、generated_at、source_hash、analyst。只有真正完成分析后才设 `status: complete`。source_hash 是 `json.dumps(evidence, sort_keys=True, ensure_ascii=False).encode('utf-8')` 的 SHA256。
+
+`publish-note --run PATH --paper ID` 会校验：栏目齐全且非空、tier 与证据等级匹配、摘录逐字存在、非全文笔记有披露、一句话结论长度与套话、brief/stub 字数上限、deep 的关键结果含数字。校验通过后创建不可变的子便条版本、附加 Markdown、回读并归档。旧的 schema 1（13 栏）笔记仍可校验与复用，无需重写。
+
+全部入选论文都有已发布笔记（任一深度）后，才报告 run 完成。

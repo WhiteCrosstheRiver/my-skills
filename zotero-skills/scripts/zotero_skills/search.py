@@ -21,9 +21,18 @@ def clean(value):
     return html.unescape(re.sub(r"<[^>]+>", " ", str(value or ""))).strip()
 
 
+# Preprint servers mint their own DOIs. They must not block a merge with the journal
+# version of the same paper, which is what left preprint/published pairs duplicated.
+PREPRINT_DOI = re.compile(r"^10\.(?:48550/arxiv\.|26434/|21203/rs\.|20944/preprints|2139/ssrn\.|31219/osf\.|1101/\d{4}\.\d{2}\.\d{2}\.)")
+
+
+def norm_title(title):
+    return re.sub(r"[^\w]", "", str(title or "").casefold())
+
+
 def identity(p):
-    if p.get("doi"):
-        return "doi:" + doi(p["doi"])
+    if p.get("doi") or p.get("preprint_doi"):
+        return "doi:" + doi(p.get("doi") or p.get("preprint_doi"))
     if p.get("arxiv"):
         return "arxiv:" + re.sub(r"v\d+$", "", p["arxiv"])
     return "title:" + re.sub(r"[^\w]", "", p["title"].casefold()) + ":" + str(p.get("year", ""))
@@ -46,19 +55,40 @@ WEB_SEARCH_EXPORT_HINTS = {
 }
 
 
+def _years_close(a, b, window=2):
+    try:
+        return abs(int(a.get("year")) - int(b.get("year"))) <= window
+    except (TypeError, ValueError):
+        return True
+
+
 def merge_candidates(records):
     merged, index = [], {}
     for raw in records:
         p = dict(raw)
         p["doi"] = doi(p.get("doi"))
+        if p["doi"] and PREPRINT_DOI.match(p["doi"]):
+            p["preprint_doi"], p["doi"] = p["doi"], ""
+            match = re.match(r"10\.48550/arxiv\.(.+)", p["preprint_doi"])
+            if match and not p.get("arxiv"):
+                p["arxiv"] = match[1]
         if not p.get("title"):
             continue
         aliases = [identity(p)]
+        if p.get("preprint_doi"):
+            aliases.append("doi:" + p["preprint_doi"])
         if p.get("arxiv"):
             aliases.append("arxiv:" + re.sub(r"v\d+$", "", p["arxiv"]))
-        title = "title:" + re.sub(r"[^\w]", "", p["title"].casefold()) + ":" + str(p.get("year", ""))
+        # Title alias ignores the year (preprint 2022, journal 2023) but only matches within two years.
+        title = "title:" + norm_title(p["title"])
         aliases.append(title)
-        found = next((index[k] for k in aliases if k in index), None)
+        found = None
+        for alias in aliases:
+            candidate = index.get(alias)
+            if candidate is None or (alias == title and not _years_close(candidate, p)):
+                continue
+            found = candidate
+            break
         # Conflicting DOIs are never silently collapsed by a title match.
         if found is not None and found.get("doi") and p.get("doi") and found["doi"] != p["doi"]:
             found = None
@@ -83,29 +113,77 @@ def merge_candidates(records):
     return merged
 
 
+STOPWORDS = set("a an and are as at by for from in into is of on or the to with via using based toward towards".split())
+
+
+def query_terms(query):
+    """Quoted phrases stay whole; field prefixes and boolean operators are dropped."""
+    terms = []
+    for token in re.findall(r'"[^"]+"|\S+', str(query)):
+        token = re.sub(r"^(?:all|ti|abs|au|cat):", "", token).strip('"()').casefold()
+        if token and token not in STOPWORDS and token not in ("and", "or", "andnot") and len(token) > 1:
+            terms.append(token)
+    return terms
+
+
+def score_candidates(candidates, queries):
+    """Transparent relevance score for triage; the host still decides inclusion."""
+    import math
+    term_sets = [t for t in (query_terms(q) for q in queries or []) if t]
+    for p in candidates:
+        title, abstract = str(p.get("title", "")).casefold(), str(p.get("abstract", "")).casefold()
+        cover = lambda text: max((sum(t in text for t in terms) / len(terms) for terms in term_sets), default=0)
+        providers = {s.get("provider") for s in p.get("sources", []) if isinstance(s, dict)}
+        cites = p.get("citation_count") or 0
+        score = 3 * cover(title) + 1.5 * cover(abstract) + 0.4 * min(max(len(providers) - 1, 0), 3)
+        score += 0.3 * math.log10(1 + cites) + (0.3 if abstract else 0) + (0.2 if p.get("pdf_urls") else 0)
+        if any(s.get("provider") == "citation-expansion" for s in p.get("sources", []) if isinstance(s, dict)):
+            score += 0.5
+        p["score"] = round(score, 2)
+    return sorted(candidates, key=lambda p: -p.get("score", 0))
+
+
+def write_ranked(run):
+    """A compact, ranked reading list: the host judges relevance from this, not raw JSON."""
+    config = run.state["config"]
+    ranked = score_candidates(run.state.get("candidates", []), config.get("queries") or [config.get("topic", "")])
+    lines = ["# 候选文献（按相关度排序）", "", f"共 {len(ranked)} 条。分数只是分诊提示（题名/摘要命中检索词、多源命中、被引、是否有摘要/PDF），入选由你判断。", ""]
+    for rank, p in enumerate(ranked, 1):
+        providers = "+".join(sorted({s.get("provider", "?") for s in p.get("sources", []) if isinstance(s, dict)}))
+        flags = " · ".join(x for x in [str(p.get("year") or "?"), (p.get("venue") or "")[:40], providers, f"{p.get('citation_count')} cites" if p.get("citation_count") else "", "摘要" if p.get("abstract") else "无摘要", "PDF" if p.get("pdf_urls") else ""] if x)
+        lines.append(f"{rank}. [{p['score']}] **{p['title']}** — {flags} — id `{p['id']}`")
+        if p.get("abstract"):
+            lines.append("   > " + re.sub(r"\s+", " ", p["abstract"])[:280])
+    (run.path / "candidates_ranked.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return ranked
+
+
 class Providers:
     def __init__(self, net):
         self.net = net
 
     def semantic(self, query, limit, years=None):
-        token, out = None, []
-        while len(out) < limit:
-            params = {"query": query, "fields": "title,year,authors,abstract,externalIds,url,venue,openAccessPdf,citationCount", "sort": "citationCount:desc"}
+        # /paper/search is relevance-ranked (max 1000 results). The previous bulk endpoint
+        # sorted keyword matches by citation count, so old classics buried on-topic work.
+        import os
+        headers = {"x-api-key": os.environ["SEMANTIC_SCHOLAR_API_KEY"]} if os.environ.get("SEMANTIC_SCHOLAR_API_KEY") else None
+        out, offset = [], 0
+        while len(out) < limit and offset < 1000:
+            size = min(100, limit - len(out), 1000 - offset)
+            params = {"query": query, "offset": offset, "limit": size, "fields": "title,year,authors,abstract,externalIds,url,venue,openAccessPdf,citationCount"}
             if years:
                 params["year"] = years
-            if token:
-                params["token"] = token
-            import os
-            headers = {"x-api-key": os.environ["SEMANTIC_SCHOLAR_API_KEY"]} if os.environ.get("SEMANTIC_SCHOLAR_API_KEY") else None
-            data = self.net.get("https://api.semanticscholar.org/graph/v1/paper/search/bulk", params, headers=headers)
-            for x in data.get("data", []):
+            data = self.net.get("https://api.semanticscholar.org/graph/v1/paper/search", params, headers=headers)
+            rows = data.get("data") or []
+            for x in rows:
+                if not x.get("title"):
+                    continue
                 ids = x.get("externalIds") or {}
                 pdf = (x.get("openAccessPdf") or {}).get("url")
-                out.append({"title": x["title"], "year": x.get("year"), "authors": [a["name"] for a in x.get("authors", [])], "abstract": x.get("abstract") or "", "doi": ids.get("DOI", ""), "arxiv": ids.get("ArXiv", ""), "url": x.get("url", ""), "venue": x.get("venue", ""), "citation_count": x.get("citationCount", 0), "semantic_id": x.get("paperId"), "pdf_urls": ([pdf] if pdf else []) + (["https://arxiv.org/pdf/" + ids["ArXiv"]] if ids.get("ArXiv") else []), "sources": [{"provider": "semantic", "query": query, "url": x.get("url"), "at": now()}]})
-            new_token = data.get("token")
-            if not data.get("data") or not new_token or new_token == token:
+                out.append({"title": x["title"], "year": x.get("year"), "authors": [a["name"] for a in x.get("authors") or []], "abstract": x.get("abstract") or "", "doi": ids.get("DOI", ""), "arxiv": ids.get("ArXiv", ""), "url": x.get("url", ""), "venue": x.get("venue", ""), "citation_count": x.get("citationCount", 0), "semantic_id": x.get("paperId"), "pdf_urls": ([pdf] if pdf else []) + (["https://arxiv.org/pdf/" + ids["ArXiv"]] if ids.get("ArXiv") else []), "sources": [{"provider": "semantic", "query": query, "url": x.get("url"), "at": now()}]})
+            offset += len(rows)
+            if not rows or data.get("next") is None:
                 break
-            token = new_token
         return out[:limit]
 
     def crossref(self, query, limit, years=None):
@@ -131,7 +209,12 @@ class Providers:
         if query.startswith("id:"):
             base = {"id_list": query[3:]}
         else:
-            expression = query if re.search(r"\b(?:all|ti|au|cat|abs):", query) else 'all:"' + query.replace('"', '') + '"'
+            if re.search(r"\b(?:all|ti|au|cat|abs):", query):
+                expression = query
+            else:
+                # The whole query as one exact phrase missed papers that word it differently.
+                terms = query_terms(query) or [query.replace('"', '')]
+                expression = " AND ".join("all:" + ('"' + t + '"' if " " in t else t) for t in terms)
             if years:
                 lo, _, hi = years.partition("-")
                 expression += f" AND submittedDate:[{lo}01010000 TO {hi or lo}12312359]"
@@ -187,19 +270,22 @@ class Providers:
             cursor = new_cursor
         return out[:limit]
 
-    def citations(self, paper, limit=10):
-        ident = paper.get("semantic_id") or ("DOI:" + paper["doi"] if paper.get("doi") else None)
+    def citations(self, paper, limit=20, directions=("references", "citations")):
+        """Backward (references) and forward (citing papers) snowballing via Semantic Scholar."""
+        ident = paper.get("semantic_id") or ("DOI:" + paper["doi"] if paper.get("doi") else ("ARXIV:" + paper["arxiv"] if paper.get("arxiv") else None))
         if not ident:
             return []
-        data = self.net.get(f"https://api.semanticscholar.org/graph/v1/paper/{ident}/references", {"fields": "title,year,authors,externalIds,abstract,openAccessPdf", "limit": min(limit, 100)})
         out = []
-        for row in data.get("data") or []:
-            p = row.get("citedPaper") or {}
-            if not p.get("title"):
-                continue
-            ids = p.get("externalIds") or {}
-            pdf = (p.get("openAccessPdf") or {}).get("url")
-            out.append({"title": p["title"], "year": p.get("year"), "authors": [a["name"] for a in (p.get("authors") or [])], "doi": ids.get("DOI", ""), "arxiv": ids.get("ArXiv", ""), "abstract": p.get("abstract") or "", "pdf_urls": [pdf] if pdf else [], "sources": [{"provider": "citation-expansion", "seed": identity(paper), "at": now()}]})
+        for direction in directions:
+            key = "citedPaper" if direction == "references" else "citingPaper"
+            data = self.net.get(f"https://api.semanticscholar.org/graph/v1/paper/{ident}/{direction}", {"fields": "title,year,authors,externalIds,abstract,openAccessPdf,citationCount,venue", "limit": min(limit, 100)})
+            for row in data.get("data") or []:
+                p = row.get(key) or {}
+                if not p.get("title"):
+                    continue
+                ids = p.get("externalIds") or {}
+                pdf = (p.get("openAccessPdf") or {}).get("url")
+                out.append({"title": p["title"], "year": p.get("year"), "authors": [a["name"] for a in (p.get("authors") or [])], "doi": ids.get("DOI", ""), "arxiv": ids.get("ArXiv", ""), "abstract": p.get("abstract") or "", "venue": p.get("venue", ""), "citation_count": p.get("citationCount", 0), "semantic_id": p.get("paperId"), "pdf_urls": [pdf] if pdf else [], "sources": [{"provider": "citation-expansion", "direction": direction, "seed": identity(paper), "at": now()}]})
         return out
 
 
@@ -240,6 +326,10 @@ def oa_pdf_urls(paper, net):
         return []
 
 
+FULLTEXT_MIN_CHARS = 8000
+FULLTEXT_MIN_PAGES = 3
+
+
 def collect_evidence(run, paper, mcp, net):
     directory = run.paper_dir(paper)
     library = run.state["config"].get("library", 1)
@@ -276,15 +366,23 @@ def collect_evidence(run, paper, mcp, net):
     paper.pop('evidence_refresh_required', None)
     text_size = sum(len(p["text"].strip()) for p in pages)
     abstract = paper.get("abstract") or snap["item"].get("abstractNote", "")
-    level = "fulltext" if text_size >= 1000 else "abstract" if abstract else "metadata"
-    state = "readable" if text_size >= 1000 else "scan_or_short_text" if pages else "unavailable"
+    # 1000 characters is a cover page or a first page, not a paper. Short extractions are
+    # "partial": citable page by page, but the note must disclose what was not read.
+    readable_pages = sum(1 for p in pages if len(p["text"].strip()) >= 200)
+    if text_size >= FULLTEXT_MIN_CHARS and readable_pages >= FULLTEXT_MIN_PAGES:
+        level, state = "fulltext", "readable"
+    elif text_size >= 1000:
+        level, state = "partial", "short_text"
+    else:
+        level = "abstract" if abstract else "metadata"
+        state = "scan_or_short_text" if pages else "unavailable"
     # Existing notes, including human edits to generated notes, are context only.
     # They never substitute for primary-source evidence in claims.json.
     notes = snap["notes"]
     evidence = {"schema": 1, "item_key": paper["item_key"], "library_id": library, "title": paper["title"], "doi": paper.get("doi"), "abstract": abstract, "level": level, "fulltext_status": state, "retrieved_at": now(), "sources": sources, "pages": pages, "user_notes": notes, "annotations": [a for att in snap["attachments"] for a in att.get("annotations", [])], "metadata": snap["item"], "discovery_sources": paper.get("sources", []), "download_failures": failures}
     write_json(directory / "evidence.json", evidence)
     (directory / "fulltext.txt").write_text("\n\n".join(f"[{p['source']} p.{p['page']}]\n{p['text']}" for p in pages) or abstract, encoding="utf-8")
-    paper.update(evidence_level=level, fulltext_status=state, download_failures=failures, evidence_hash=digest(json.dumps(evidence, sort_keys=True, ensure_ascii=False)), status="awaiting_analysis")
+    paper.update(evidence_level=level, fulltext_status=state, text_chars=text_size, text_pages=readable_pages, download_failures=failures, evidence_hash=digest(json.dumps(evidence, sort_keys=True, ensure_ascii=False)), status="awaiting_analysis")
     run.save()
     return evidence
 
@@ -410,25 +508,79 @@ def discover(run, net):
                 run.event("query_completed", provider=provider, query=query, count=len(rows))
             except Exception as exc:
                 # No request URL in diagnostics: optional provider keys can be query parameters.
-                run.event("query_failed", provider=provider, query=query, error=type(exc).__name__)
+                status = re.search(r"'(\d{3}) ", str(exc))
+                run.event("query_failed", provider=provider, query=query, error=type(exc).__name__, http_status=status[1] if status else None)
     record_host_searches(run)
     added = import_input_files(run, net, config.get("inputs", []))
     if added:
         records = list(run.state["candidates"])
     run.state["candidates"] = merge_candidates(records)
     if config.get("citation_hops", 0) and not run.state.get("citations_done"):
-        for seed in run.state["candidates"][:min(3, len(run.state["candidates"]))]:
+        # Seed from the most relevant hits, not whichever records happened to merge first.
+        seeds = score_candidates(list(run.state["candidates"]), config.get("queries") or [config.get("topic", "")])[:5]
+        records = list(run.state["candidates"])
+        for seed in seeds:
             try:
-                records.extend(providers.citations(seed, limit=10))
+                records.extend(providers.citations(seed))
             except Exception as exc:
                 run.event("citation_expansion_failed", seed=identity(seed), error=type(exc).__name__)
         run.state["candidates"] = merge_candidates(records)
         run.state["citations_done"] = True
     run.state["status"] = "awaiting_selection"
+    write_ranked(run)
     run.save()
     write_json(run.path / "candidates.json", run.state["candidates"])
     pending = len(run.state.get("host_searches", []))
-    return {"run": str(run.path), "status": run.state["status"], "candidates": len(run.state["candidates"]), "host_searches": pending, **({"next": "Open each url in web_sources.json with the host's browsing tools, save the sites' own exports, then resume --run PATH --input FILE; afterwards write selection.json with included [{id, reason}] and excluded [{id, reason}] and resume --selection FILE."} if pending else {"next": "Read candidates.json; write selection.json with included [{id, reason}] and excluded [{id, reason}], then resume --selection FILE."})}
+    return {"run": str(run.path), "status": run.state["status"], "candidates": len(run.state["candidates"]), "host_searches": pending, "ranked": str(run.path / "candidates_ranked.md"), **({"next": "Open each url in web_sources.json with the host's browsing tools, save the sites' own exports, then resume --run PATH --input FILE; afterwards write selection.json with included [{id, reason}] and excluded [{id, reason}] and resume --selection FILE."} if pending else {"next": "Read candidates_ranked.md; write selection.json (mark core papers with reason \"core: ...\") with included [{id, reason}] and excluded [{id, reason}], then resume --selection FILE."})}
+
+
+def snowball(run, net, limit=20):
+    """Forward/backward snowballing from the papers already selected (or the top-ranked
+    candidates before selection). New candidates are merged and re-ranked."""
+    providers = Providers(net)
+    seeds = run.state.get("papers") or score_candidates(list(run.state.get("candidates", [])), run.state["config"].get("queries") or [run.state["config"].get("topic", "")])[:5]
+    before = {p["id"] for p in run.state.get("candidates", [])}
+    records = list(run.state.get("candidates", []))
+    failures = 0
+    for seed in seeds:
+        try:
+            records.extend(providers.citations(seed, limit=limit))
+        except Exception as exc:
+            failures += 1
+            run.event("citation_expansion_failed", seed=identity(seed), error=type(exc).__name__)
+    run.state["candidates"] = merge_candidates(records)
+    write_ranked(run)
+    run.save()
+    write_json(run.path / "candidates.json", run.state["candidates"])
+    new = [p for p in run.state["candidates"] if p["id"] not in before]
+    return {"run": str(run.path), "seeds": len(seeds), "failed_seeds": failures, "new_candidates": len(new), "ranked": str(run.path / "candidates_ranked.md"), "next": "Review the new candidates; to import them, write an updated selection.json (keep earlier inclusions) and resume --selection."}
+
+
+def triage(run):
+    """Group papers by the evidence actually obtained, so note depth follows the source."""
+    from .notes import DEFAULT_TIER
+    papers = [p for p in run.state.get("papers", []) if p.get("evidence_level")]
+    order = ["fulltext", "partial", "abstract", "metadata"]
+    groups = {level: [p for p in papers if p["evidence_level"] == level] for level in order}
+    label = {"fulltext": "全文", "partial": "部分全文", "abstract": "仅摘要", "metadata": "仅元数据"}
+    work = {"deep": "精读笔记（9 栏，带数字与页码证据）", "brief": "简报（5 栏，≤1800 字）", "stub": "占位条目（3 栏，≤600 字）"}
+    lines = ["# 证据分诊", "", "笔记深度由已取得的证据决定，而不是一律填 13 栏。先尽量把「仅摘要/仅元数据」升级为全文，再动笔。", "", "| 证据 | 篇数 | 默认笔记 |", "|---|---|---|"]
+    for level in order:
+        lines.append(f"| {label[level]} | {len(groups[level])} | {work[DEFAULT_TIER[level]]} |")
+    readable = groups["fulltext"] + groups["partial"]
+    core = [p for p in readable if str(p.get("inclusion_reason", "")).casefold().startswith("core")]
+    if core:
+        # selection.json reasons starting with "core" mark the review's anchors; other full texts get briefs.
+        lines += ["", f"## 建议精读（core，{len(core)} 篇）", "", "其余 %d 篇全文条目建议 `note-template --tier brief`。" % (len(readable) - len(core)), ""]
+        lines += [f"- {p.get('title', '')[:90]} — `{p['id']}`" for p in core]
+    missing = groups["abstract"] + groups["metadata"] + groups["partial"]
+    if missing:
+        lines += ["", "## 可升级为全文的条目", "", "通过机构访问、作者主页或预印本取得 PDF 后：附到 Zotero 条目并运行 `resume --run PATH --refresh-evidence`；或写 verified links JSON 用 `fetch-pdfs --run PATH --links FILE`，再 `resume --run PATH`。", ""]
+        for p in missing:
+            link = "https://doi.org/" + p["doi"] if p.get("doi") else (p.get("url") or "")
+            lines.append(f"- [{label[p['evidence_level']]}] {p.get('title', '')[:90]} — `{p['id']}` {link}")
+    (run.path / "triage.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {level: len(groups[level]) for level in order}
 
 
 def prepare_selected(run, mcp, net, selection=None):
@@ -475,12 +627,14 @@ def prepare_selected(run, mcp, net, selection=None):
                 paper["supplemented_fields"] = result.get("supplemented", [])
                 paper["status"] = "imported"
                 run.save()
-            if paper["status"] not in ["awaiting_analysis", "published"]:
+            # fetch-pdfs flags items whose new PDF must replace abstract-level evidence.
+            if paper["status"] not in ["awaiting_analysis", "published"] or paper.get("evidence_refresh_required"):
                 collect_evidence(run, paper, mcp, net)
         except Exception as exc:
             paper["status"] = "error"
             paper["error"] = type(exc).__name__ + ": " + str(exc)
             run.save()
     run.state["status"] = "complete" if all(p["status"] == "published" for p in run.state["papers"]) else "awaiting_analysis" if all(p["status"] in ["awaiting_analysis", "published"] for p in run.state["papers"]) else "partial_failure"
+    counts = triage(run)
     run.save()
-    return {"run": str(run.path), "status": run.state["status"], "papers": [{"id": p["id"], "key": p.get("item_key"), "status": p["status"], "evidence": p.get("evidence_level")} for p in run.state["papers"]], "next": "Read every evidence.json/fulltext.txt, write note.md and claims.json following references/notes.md; publish-note --run PATH --paper ID."}
+    return {"run": str(run.path), "status": run.state["status"], "evidence": counts, "triage": str(run.path / "triage.md"), "papers": [{"id": p["id"], "key": p.get("item_key"), "status": p["status"], "evidence": p.get("evidence_level")} for p in run.state["papers"]], "next": "Read triage.md first. Upgrade what you can to full text, then write one note per paper at the depth its evidence supports (references/notes.md); publish-note --run PATH --paper ID."}

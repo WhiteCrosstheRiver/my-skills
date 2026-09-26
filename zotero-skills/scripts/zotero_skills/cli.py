@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .core import write_lock_path
 from .core import MCP, Network, Run, default_output, lock, read_json
-from .search import discover, import_input_files, prepare_selected
+from .search import discover, import_input_files, prepare_selected, snowball, triage
 from .notes import note_template, publish
 
 
@@ -38,12 +38,18 @@ def parser():
     resume.add_argument("--selection", type=Path)
     resume.add_argument("--input", action="append", dest="inputs", default=[], help="Merge host-collected .bib/.ris/.md export files into the candidate pool first")
     resume.add_argument("--discover", action="store_true")
+    resume.add_argument("--refresh-evidence", action="store_true", help="Re-collect evidence for every paper below full text (e.g. after attaching PDFs in Zotero)")
+    resume.add_argument("--snowball", action="store_true", help="Forward+backward citation expansion from the selected papers (or top-ranked candidates)")
     resume.add_argument("--retry-errors", action="store_true")
     resume.add_argument("--restore", action="store_true", help="Restore prepared, unmerged dedup children")
     for name in ["publish-note", "note-template"]:
         command = sub.add_parser(name)
         command.add_argument("--run", type=Path, required=True)
         command.add_argument("--paper", required=True)
+        if name == "note-template":
+            command.add_argument("--tier", choices=["deep", "brief", "stub"], help="Default follows the evidence: fulltext/partial→deep, abstract→brief, metadata→stub; fulltext may be written as brief")
+    triage_cmd = sub.add_parser("triage", help="Group a run's papers by evidence level and list items that can be upgraded to full text")
+    triage_cmd.add_argument("--run", type=Path, required=True)
     status = sub.add_parser("status")
     status.add_argument("--run", type=Path, required=True)
     # Later-stage modules register their interfaces without changing shared behavior.
@@ -70,6 +76,11 @@ def execute(args):
         return result
     if args.command == "status":
         return Run(args.run).state
+    if args.command == "triage":
+        run = Run(args.run)
+        counts = triage(run)
+        run.save()
+        return {"evidence": counts, "triage": str(run.path / "triage.md")}
     if args.command == "deep-search":
         if args.limit < 1 or args.candidate_limit < 1:
             raise ValueError("Limits must be positive")
@@ -87,7 +98,7 @@ def execute(args):
         target = directory / "note.md"
         if target.exists():
             raise ValueError("note.md exists; refusing to overwrite")
-        target.write_text(note_template(read_json(directory / "evidence.json")), encoding="utf-8")
+        target.write_text(note_template(read_json(directory / "evidence.json"), args.tier), encoding="utf-8")
         return {"draft": str(target), "status": "draft_not_published"}
     if args.command == "publish-note":
         run = Run(args.run)
@@ -98,6 +109,13 @@ def execute(args):
         with lock(run.path / ".lock"):
             if args.restore and run.state['mode'] != 'dedup':
                 raise ValueError('--restore applies only to a dedup recovery manifest')
+            if getattr(args, "refresh_evidence", False):
+                if run.state["mode"] not in ("deep-search", "distill"):
+                    raise ValueError("--refresh-evidence applies to deep-search and distill runs")
+                for paper in run.state["papers"]:
+                    if paper.get("item_key") and paper.get("evidence_level") != "fulltext":
+                        paper["evidence_refresh_required"] = True
+                run.save()
             if run.state["mode"] == "deep-search":
                 net = Network(args.output / "cache")
                 if args.inputs:
@@ -107,6 +125,8 @@ def execute(args):
                         return {"run": str(run.path), "merged_inputs": added, "candidates": len(run.state["candidates"]), **({"next": "All input files were already merged."} if not added else {"next": "Open any remaining web_sources.json urls, then write selection.json with included [{id, reason}] and resume --selection FILE."})}
                 if args.discover:
                     return discover(run, net)
+                if args.snowball:
+                    return snowball(run, net)
                 with lock(write_lock_path()):
                     return prepare_selected(run, MCP(args.url), net, args.selection)
             mod = __import__("zotero_skills." + run.state["mode"], fromlist=["resume"])
@@ -129,15 +149,18 @@ def help_table():
             ["resume --run PATH --discover", "重试失败的检索(保留已缓存结果)"],
             ["resume --run PATH --retry-errors", "按任务类型恢复出错文献"],
             ["status --run PATH", "查看任务 pending/error/published 状态"],
-            ["note-template --run PATH --paper ID", "生成待分析笔记模板(草稿，非成品)"],
+            ["resume --run PATH --refresh-evidence", "在 Zotero 手动补附 PDF 后，重新收集所有非全文条目的证据并更新 triage.md"],
+            ["resume --run PATH --snowball", "从已选文献(或排名靠前候选)做前向+后向引文扩展，结果并入 candidates_ranked.md"],
+            ["triage --run PATH", "按实际取得的证据(全文/部分/摘要/元数据)分组，列出可升级为全文的条目"],
+            ["note-template --run PATH --paper ID [--tier deep|brief|stub]", "按证据等级生成对应深度的笔记模板(草稿，非成品)"],
             ["publish-note --run PATH --paper ID", "校验并发布宿主完成的笔记(note.md+claims.json)到 Zotero"],
             ["dedup --collection KEY [--apply]", "去重：仅合并标识/元数据兼容的重复组，保留子条目与恢复清单；省略 apply 仅出计划"],
-            ["fetch-pdfs --run PATH [--force]", "为已选文献补缺PDF：OpenAlex/Unpaywall/Semantic/arXiv 多解析器合法回退，只增不覆盖，可断点续跑"],
+            ["fetch-pdfs --run PATH [--links FILE]", "为已选文献补缺PDF：OpenAlex/Unpaywall/Semantic/Europe PMC/PMC/Crossref 开放获取回退，只增不覆盖；之后 resume 重新收集证据"],
             ["distill --collection KEY", "蒸馏整个收藏夹树(无篇数截断)，复用笔记管线，保留历史版本"],
             ["review --title 标题 --source-run PATH", "冻结已发布精读，生成证据矩阵供宿主综合写综述"],
             ["review --publish --run PATH", "发布版本化综述、离线HTML(内置KaTeX)与完整证据包"],
         ],
-        "typical_flow": "deep-search → 宿主读 web_sources.json 合并 --input → 写 selection.json → resume --selection → 逐篇读证据写 note.md/claims.json → publish-note → (可选) distill / review",
+        "typical_flow": "deep-search → 读 candidates_ranked.md(+web_sources.json 合并 --input) → 写 selection.json → resume --selection → 读 triage.md、尽量升级全文 → 按证据深度写 note.md/claims.json → publish-note → (可选) distill / review",
         "docs": "各阶段详见 references/{search,notes,dedup,distill,review}.md",
     }
 

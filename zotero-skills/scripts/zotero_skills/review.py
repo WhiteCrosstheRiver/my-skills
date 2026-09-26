@@ -29,6 +29,16 @@ def render_body(text):
     return re.sub(r'ZOTEROMATHPLACE(\d+)END', lambda m: html.escape(formulas[int(m[1])]), result)
 
 
+# Which note section feeds each matrix column, per note depth. Stubs only contribute a line
+# to the review's reading-list appendix; they are never narrated as if they were findings.
+MATRIX_FIELDS = {
+    'legacy': {'takeaway': '核心贡献', 'question': '背景与研究问题', 'method': '关键方法与过程', 'results': '结果与对照', 'conflicts': '局限与矛盾'},
+    'deep': {'takeaway': '一句话结论', 'question': '问题与动机', 'method': '方法要点', 'results': '关键结果', 'conflicts': '边界与疑点'},
+    'brief': {'takeaway': '一句话结论', 'question': '', 'method': '方法定位', 'results': '作者声称', 'conflicts': '可信度与待核'},
+    'stub': {'takeaway': '一句话定位', 'question': '', 'method': '', 'results': '', 'conflicts': ''},
+}
+
+
 def section(body, heading):
     match = re.search(r'^##\s+' + re.escape(heading) + r'\s*\n(.*?)(?=^##\s|\Z)', body, re.M | re.S)
     return match[1].strip() if match else ''
@@ -64,7 +74,7 @@ def prepare(output, title, source_runs=(), collection=None, topic=None, library=
         directory = path.parent
         note = (directory / 'note.md').read_text(encoding='utf-8')
         claims, evidence = read_json(directory / 'claims.json'), read_json(directory / 'evidence.json')
-        _, body = validate_note(note, claims, evidence)
+        meta, body = validate_note(note, claims, evidence)
         if digest(note) != pub['content_hash']:
             raise ValueError('Published note has changed: republish before review')
         claims_hash = digest(json.dumps(claims, sort_keys=True, ensure_ascii=False))
@@ -83,14 +93,18 @@ def prepare(output, title, source_runs=(), collection=None, topic=None, library=
         entry['claims_hash'] = digest(json.dumps(claims, sort_keys=True, ensure_ascii=False))
         entry['version_hash'] = digest(entry['hash'] + entry['claims_hash'] + entry['evidence_hash'])
         sources.append(entry)
-        matrix.append({'key': key, 'title': entry['title'], 'question': section(body, '背景与研究问题'), 'method': section(body, '关键方法与过程'), 'results': section(body, '结果与对照'), 'strength': evidence['level'], 'conflicts': section(body, '局限与矛盾'), 'claim_ids': [c['id'] for c in claims]})
+        tier = meta.get('note_tier', 'legacy')
+        entry['note_tier'] = tier
+        fields = MATRIX_FIELDS[tier]
+        matrix.append({'key': key, 'title': entry['title'], 'tier': tier, 'strength': evidence['level'], **{name: section(body, heading) if heading else '' for name, heading in fields.items()}, 'claim_ids': [c['id'] for c in claims]})
     run.state.update(sources=sources, status='awaiting_synthesis')
     run.save()
     write_json(run.path / 'matrix.json', matrix)
     with (run.path / 'matrix.csv').open('w', encoding='utf-8-sig', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=list(matrix[0]))
         writer.writeheader(); writer.writerows(matrix)
-    return {'run': str(run.path), 'papers': len(sources), 'status': 'awaiting_synthesis', 'next': 'Read matrix.json and source notes. Write review.md using [R1] citations and review-claims.json [{id,statement,kind,refs:[ITEMKEY:C1]}]. Independently audit before review --publish --run PATH.'}
+    tiers = {t: sum(s['note_tier'] == t for s in sources) for t in ['deep', 'brief', 'stub', 'legacy']}
+    return {'run': str(run.path), 'papers': len(sources), 'tiers': tiers, 'status': 'awaiting_synthesis', 'next': 'Read matrix.json and source notes. Write review.md using [R1] citations and review-claims.json [{id,statement,kind,refs:[ITEMKEY:C1]}]. Independently audit before review --publish --run PATH.'}
 
 
 def validate(run):

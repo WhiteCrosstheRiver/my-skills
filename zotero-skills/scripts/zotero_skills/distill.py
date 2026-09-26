@@ -7,7 +7,7 @@ from .core import write_lock_path
 from .core import MCP, Network, Run, digest, lock, read_json
 from .library import enumerate_items
 from .notes import render_markdown, split_frontmatter, validate_note
-from .search import collect_evidence
+from .search import collect_evidence, triage
 
 
 def reusable(run, paper, mcp):
@@ -49,12 +49,12 @@ def reusable(run, paper, mcp):
 
 def process(run, mcp, net, retry=False, refresh=False):
     for paper in run.state['papers']:
-        if paper['status'] in ['published', 'awaiting_analysis'] and not refresh:
+        if paper['status'] in ['published', 'awaiting_analysis'] and not refresh and not paper.get('evidence_refresh_required'):
             continue
         if paper['status'] == 'error' and not retry:
             continue
         try:
-            if not refresh and reusable(run, paper, mcp):
+            if not refresh and not paper.get('evidence_refresh_required') and reusable(run, paper, mcp):
                 continue
             collect_evidence(run, paper, mcp, net)
         except Exception as exc:
@@ -62,8 +62,9 @@ def process(run, mcp, net, retry=False, refresh=False):
             run.save()
     statuses = [p['status'] for p in run.state['papers']]
     run.state['status'] = 'complete' if all(s == 'published' for s in statuses) else 'partial_failure' if 'error' in statuses else 'awaiting_analysis'
+    counts = triage(run)
     run.save()
-    return {'run': str(run.path), 'status': run.state['status'], 'total': len(statuses), 'published': statuses.count('published'), 'awaiting_analysis': statuses.count('awaiting_analysis'), 'errors': statuses.count('error'), 'next': 'Host agent reads every evidence bundle, writes note.md + claims.json and publish-note; no analysis API needed.'}
+    return {'run': str(run.path), 'status': run.state['status'], 'total': len(statuses), 'published': statuses.count('published'), 'awaiting_analysis': statuses.count('awaiting_analysis'), 'errors': statuses.count('error'), 'evidence': counts, 'triage': str(run.path / 'triage.md'), 'next': 'Read triage.md, upgrade abstract-only items to full text where possible, then write each note at the depth its evidence supports (references/notes.md) and publish-note.'}
 
 
 def register(sub):

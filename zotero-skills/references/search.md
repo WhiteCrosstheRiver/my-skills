@@ -1,36 +1,73 @@
 # Deep search
 
-The CLI is a resumable workflow, not a second LLM. Run it from the skill folder:
+The CLI is a resumable workflow, not a second LLM. Run it from the skill folder.
+
+## 1. Plan the queries before running anything
+
+A single phrase finds only papers worded like that phrase. Before `deep-search`, write 4–8 queries that cover different **axes**, not synonyms of one phrase:
+
+- core method names and their common abbreviations (e.g. "equivariant interatomic potential", "MACE", "NequIP")
+- the problem stated without method words ("DFT accuracy molecular dynamics large systems")
+- the application domain × method ("machine learning potential electrolyte")
+- the competing or older approach, so that comparisons are found ("classical force field polarizable electrolyte")
+- review/benchmark queries ("benchmark machine learning potentials")
+
+Keep each query short (3–6 content words). Use quotes only around true fixed phrases.
 
 ```text
-python scripts/zotero_cli.py deep-search --topic "机器学习原子势" --query "machine learning interatomic potentials" --query "equivariant interatomic potentials" --query "atomic cluster expansion" --limit 100 --collection-name "机器学习原子势"
+python scripts/zotero_cli.py deep-search --topic "机器学习原子势" \
+  --query "machine learning interatomic potentials" --query "equivariant interatomic potential" \
+  --query "atomic cluster expansion" --query "benchmark machine learning potentials" \
+  --years 2018-2026 --limit 150 --collection-name "机器学习原子势"
 ```
 
-`--providers semantic crossref arxiv` is the default. Europe PMC is useful for biomedical topics. OpenAlex is optional and requires `OPENALEX_API_KEY`; Semantic Scholar accepts `SEMANTIC_SCHOLAR_API_KEY`. Rate limits and outage failures remain in run.json; inspect them before claiming search coverage. `--years 2018-2026` (hyphen form; other separators are normalized), `--candidate-limit`, `--citation-hops 0|1` control discovery. With arXiv only, `--query id:ID1,ID2` is a reproducible seed lookup, not a broad search.
+Providers: `semantic crossref arxiv` by default (Europe PMC for biomedical topics; OpenAlex with `OPENALEX_API_KEY`; Semantic Scholar is less rate-limited with `SEMANTIC_SCHOLAR_API_KEY`). Semantic Scholar uses its relevance-ranked search (up to 1000 results per query). arXiv queries are sent as an AND of terms, not one exact phrase. `--citation-hops 1` (default) runs backward **and** forward citation expansion from the 5 most relevant hits.
 
-**Host-assisted sources (default on): `scholar`, `xmol`; `researchgate` is available but opt-in only — its login walls, email-token verification and anti-bot checks cost more than the marginal coverage it adds over Crossref/Semantic Scholar.** These sites offer no bulk API and forbid programmatic scraping, so the CLI never sends them HTTP. Instead it writes `web_sources.json` into the run directory: one ready-to-open search URL per provider per query (Scholar with year bounds), plus per-site export hints. The host agent opens each URL with its own browsing/reading tools, reads the results, saves the site's own citation exports (Scholar Cite→BibTeX, ResearchGate Export citation→RIS, X-MOL: copy DOIs/titles into a .md list; some results require login) or DOI lists, then merges them:
+Failed queries stay in `run.json` with their HTTP status; read them before claiming coverage and retry with `resume --run PATH --discover`.
+
+## 2. Host-assisted sources
+
+`scholar` and `xmol` are on by default; `researchgate` is opt-in (login walls and bot checks cost more than they add). These sites have no bulk API and forbid scraping, so the CLI never sends them HTTP. It writes `web_sources.json` with one search URL per provider per query. Open each URL with your browsing tools, save the site's own export (Scholar Cite → BibTeX; X-MOL: copy DOIs/titles into a `.md` list), then merge:
 
 ```text
-python scripts/zotero_cli.py resume --run PATH --input scholar.bib --input digest.ris
+python scripts/zotero_cli.py resume --run PATH --input scholar.bib --input xmol.md
 ```
 
-Merged entries are DOI-resolved against Crossref and deduplicated into candidates.json; re-merging the same file is a no-op. Search coverage is only complete after every `web_sources.json` URL has been read this way or its failure is recorded.
+Merged entries are DOI-resolved via Crossref and deduplicated. If a URL could not be read (login, captcha), record that instead of pretending it was covered.
 
-**Selection policy: recall before precision — 应得尽得，全量入库。** Indirectly related candidates (adjacent materials, neighboring methods, applied-domain variants) often open new research directions; do not exclude them as redundancy. **The default is to import every relevant candidate into Zotero**; the candidate pool exists to be collected, not to be skimmed for a hand-picked few. Rules:
+## 3. Select from the ranked list
 
-1. `--limit` is the discovery/selection budget — set it high enough to cover the whole relevant candidate pool (`--limit 500` for a normal topic scan), never a convenience cap for a demo. A pool of N relevant candidates must yield ~N imported items, not a curated subset.
-2. Reserve `excluded` for **true noise only** (off-domain keyword hits, duplicate records, editor letters, non-scientific items). Every exclusion gets an individual, specific reason; batch exclusions with a blanket rationale are not acceptable for on-topic candidates. When in doubt, include — an extra library item costs nothing, a missing one silently biases later reviews.
-3. Distill/review depth is decoupled from import: import everything relevant first, then choose which items to distill into notes. "固定集合专题综述" describes the **distilled** subset, never the library scope; the full pool stays in the collection for future expansion and snowballing.
-4. After import, verify: the Zotero collection item count must equal (included − pre-existing duplicates); report the number. A large gap between pool size and imported count requires justification in the run report.
+Read `candidates_ranked.md`, not the raw JSON. It lists every candidate with a transparent score (query-term hits in title/abstract, number of providers that found it, citations, whether an abstract/PDF exists) plus an abstract snippet. The score is triage only; you decide.
 
-Read candidates.json. Write selection.json with `included: [{id, reason}]` and `excluded: [{id, reason}]`; reasons must describe relevance, not citation count alone. Record query scope and missing providers. Then:
+Preprints and their journal versions are merged (arXiv/ChemRxiv/bioRxiv/SSRN DOIs are kept as `preprint_doi`), so one paper appears once.
+
+Selection rules:
+
+1. **Include** everything on-topic, plus adjacent work that could change the review's framing (neighbouring methods, competing approaches, key applications). Recall matters at import time: an extra library item is cheap.
+2. **Exclude** noise with a specific reason each (off-domain keyword hits, errata, editorials). No blanket reasons for on-topic items.
+3. Mark the **core set** in the reasons: the 10–20 papers that the review will lean on (foundational methods, strongest results, direct disagreements). Write `"reason": "core: …"`. These get deep notes; the rest get briefs. Import breadth and reading depth are separate decisions.
+4. `--limit` caps how many can be included. Set it to the size of the relevant pool, not a demo number.
+
+`selection.json`:
+
+```json
+{"included": [{"id": "…", "reason": "core: first equivariant potential with data-efficiency results"},
+              {"id": "…", "reason": "application of ACE to Li electrolytes; adjacent domain"}],
+ "excluded": [{"id": "…", "reason": "astronomy 'potential' keyword hit"}]}
+```
 
 ```text
 python scripts/zotero_cli.py resume --run PATH --selection PATH/selection.json
 ```
 
-This imports/reuses papers, adds collection membership, retrieves PDFs and writes per-paper evidence.json plus complete page-labeled fulltext.txt. For each paper follow notes.md and publish it. `resume --run PATH --discover` retries failed discovery requests; it preserves successful cached queries.
+This imports or reuses items (existing fields, notes and attachments are never overwritten), retrieves PDFs through open-access resolvers, writes per-paper `evidence.json` and page-labelled `fulltext.txt`, and writes `triage.md`.
 
-Export adapters: `--input scholar.bib`, `--input digest.ris`, `--input digest.md`. Markdown discovery uses DOI identifiers and resolves them; don't treat third-party summaries as paper full text. Google Scholar and X-MOL provide no bulk API. Browse supplemental results with the host's browser when appropriate, then save structured exports or identifier lists. Do not automate forbidden scraping or bypass access controls.
+## 4. Snowball from what you chose
 
-PDF attempts use provider links and official arXiv links. Existing PDFs are preferred. All failed attempts remain in evidence. Preserve TLS validation using the OS trust store; do not work around certificate failures by disabling verification. When every open-access resolver is exhausted, a last-resort `scihub` chain resolves a live mirror list (updated as links die and return) before falling back to a hardcoded set, then queries each mirror for the DOI and follows the embedded `#pdf` link; mirror bot-check pages are skipped automatically and every attempt is recorded in the download report. For accessible full text missed by providers, obtain it through the host's authorized tools and attach it, then refresh evidence. Avoid claiming exhaustive coverage from finite search limits.
+After selection, run `resume --run PATH --snowball`. It expands references and citing papers of the selected set, re-ranks, and reports how many candidates are new. Add worthwhile ones to `selection.json` (keep earlier inclusions) and `resume --selection` again. One round is usually enough; stop when a round adds few on-topic papers.
+
+## 5. Full text before notes
+
+Read `triage.md`. For every `abstract`/`metadata`/`partial` item, try legal routes first: institutional access, author pages, preprint servers, PMC. Attach the PDF in Zotero and run `resume --run PATH --refresh-evidence`, or write a verified links file (`item_key`, `url`, `source`, `version`) for `fetch-pdfs --run PATH --links FILE` and then `resume --run PATH` (downloaded items are re-collected automatically). Then write notes per [notes.md](notes.md).
+
+Preserve TLS validation (the OS trust store is used); never disable certificate checks. Do not bypass paywalls or access controls. Never claim exhaustive coverage from finite search limits; report queries, providers, failures and the date searched.

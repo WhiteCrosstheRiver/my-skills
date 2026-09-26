@@ -18,17 +18,20 @@ python -m venv .venv
 
 ## 工作方式
 
-`deep-search` 保存候选文献，助手审核相关性后用 `resume --selection` 导入并提取全文。助手逐篇编写 `note.md` 与 `claims.json`，最后运行 `publish-note`。程序不会把空白模板或抓取到的摘要冒充完整精读。
+`deep-search` 保存候选文献并生成按相关度排序的 `candidates_ranked.md`，助手审核相关性后用 `resume --selection` 导入并提取全文。随后读 `triage.md`：笔记深度跟着证据走——全文核心文献写 deep 精读（9 栏），仅摘要写 brief 简报（5 栏，≤1800 字），仅元数据写 stub 占位（3 栏）。助手逐篇编写 `note.md` 与 `claims.json`，最后运行 `publish-note`。程序不会把空白模板或抓取到的摘要冒充完整精读，也不再要求把摘要撑成 13 栏。旧的 13 栏笔记仍可校验和复用。
 
 每篇保存 Zotero 子便条、Markdown 附件、本地Markdown及证据定位。没有全文时明确区分摘要/元数据级分析。技术细节和模式说明见 [SKILL.md](SKILL.md) 与其中的参考文件。
 
 | 命令 | 用途 |
 |---|---|
 | `doctor` | 检查本机连接、权限、版本，不打印凭据 |
-| `deep-search --topic "领域" --query "扩展检索式" --years 2018-2026 --limit 100` | 多源检索与引文扩展；默认含 Google Scholar / X-MOL 宿主协作源（ResearchGate 需 `--providers researchgate` 显式开启，登录墙繁琐不建议）（生成 `web_sources.json` 检索链接，宿主读取后经 `--input` 合并）；选择策略宁全勿缺，间接相关默认保留 |
+| `deep-search --topic "领域" --query "扩展检索式" --years 2018-2026 --limit 100` | 多源检索（Semantic Scholar 相关度排序）与前向+后向引文扩展，预印本与正式版自动合并；默认含 Google Scholar / X-MOL 宿主协作源（ResearchGate 需 `--providers researchgate` 显式开启，登录墙繁琐不建议）（生成 `web_sources.json` 检索链接，宿主读取后经 `--input` 合并）；选择策略宁全勿缺，间接相关默认保留 |
 | `resume --run PATH --input FILE [--input FILE2]` | 把宿主采集的 Scholar BibTeX、ResearchGate RIS、X-MOL/网页采集的 DOI/Markdown 列表合并进候选池（Crossref 校验 DOI，自动去重） |
-| `resume --run PATH --selection selection.json` | 按已有任务继续入库和整理证据 |
-| `note-template --run PATH --paper ID` | 创建待分析模板；不是完成的笔记 |
+| `resume --run PATH --selection selection.json` | 按已有任务继续入库和整理证据，生成 `triage.md` |
+| `resume --run PATH --snowball` | 从已选文献做前向+后向引文扩展，重新排序候选 |
+| `resume --run PATH --refresh-evidence` | 在 Zotero 手动补附 PDF 后，重新收集非全文条目的证据 |
+| `triage --run PATH` | 按实际证据（全文/部分/摘要/元数据）分组，列出可升级为全文的条目 |
+| `note-template --run PATH --paper ID [--tier deep\|brief\|stub]` | 按证据深度创建待分析模板；不是完成的笔记 |
 | `publish-note --run PATH --paper ID` | 校验并发布宿主完成的详细笔记 |
 | `dedup --collection KEY --apply` | 仅合并标识及元数据兼容的重复组；省略 apply 仅生成计划 |
 | `distill --collection KEY` | 蒸馏整个收藏夹树，无篇数截断；原笔记及历史版本保留 |
