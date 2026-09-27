@@ -6,9 +6,10 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
 import pymupdf as fitz
+import httpx
 
 from .core import MCP, Network, Run, digest, now, read_json, write_json
 
@@ -109,7 +110,8 @@ def merge_candidates(records):
             if alias not in index or alias != title or not index[alias].get("doi"):
                 index[alias] = found
     for p in merged:
-        p["id"] = digest(identity(p))[:20]
+        # DOI enrichment must not invalidate saved screening or paper directories.
+        p["id"] = p.get('id') or digest(identity(p))[:20]
     return merged
 
 
@@ -173,7 +175,14 @@ class Providers:
             params = {"query": query, "offset": offset, "limit": size, "fields": "title,year,authors,abstract,externalIds,url,venue,openAccessPdf,citationCount"}
             if years:
                 params["year"] = years
-            data = self.net.get("https://api.semanticscholar.org/graph/v1/paper/search", params, headers=headers)
+            try:
+                data = self.net.get("https://api.semanticscholar.org/graph/v1/paper/search", params, headers=headers)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code != 429:
+                    raise
+                # Bulk has different matching/order semantics; retain that provenance.
+                # Never sort only by citations, which hides new work.
+                return merge_candidates(out + self.semantic_bulk(query, limit, years))[:limit]
             rows = data.get("data") or []
             for x in rows:
                 if not x.get("title"):
@@ -184,6 +193,33 @@ class Providers:
             offset += len(rows)
             if not rows or data.get("next") is None:
                 break
+        return out[:limit]
+
+    def semantic_bulk(self, query, limit, years=None):
+        import os
+        headers = {"x-api-key": os.environ['SEMANTIC_SCHOLAR_API_KEY']} if os.environ.get('SEMANTIC_SCHOLAR_API_KEY') else None
+        out, token, seen = [], None, set()
+        while len(out) < limit:
+            params = {'query': query, 'fields': 'title,year,authors,abstract,externalIds,url,venue,openAccessPdf,citationCount'}
+            if years:
+                params['year'] = years
+            if token:
+                params['token'] = token
+            data = self.net.get('https://api.semanticscholar.org/graph/v1/paper/search/bulk', params, headers=headers)
+            for x in data.get('data') or []:
+                if not x.get('title'):
+                    continue
+                ids = x.get('externalIds') or {}
+                pdf = (x.get('openAccessPdf') or {}).get('url')
+                out.append({'title': x['title'], 'year': x.get('year'), 'authors': [a['name'] for a in x.get('authors') or []],
+                            'abstract': x.get('abstract') or '', 'doi': ids.get('DOI', ''), 'arxiv': ids.get('ArXiv', ''),
+                            'url': x.get('url', ''), 'venue': x.get('venue', ''), 'citation_count': x.get('citationCount', 0),
+                            'semantic_id': x.get('paperId'), 'pdf_urls': [pdf] if pdf else [],
+                            'sources': [{'provider': 'semantic', 'query': query, 'endpoint': 'bulk', 'fallback': 'relevance_rate_limited', 'at': now()}]})
+            token = data.get('token')
+            if not data.get('data') or not token or token in seen:
+                break
+            seen.add(token)
         return out[:limit]
 
     def crossref(self, query, limit, years=None):
@@ -275,11 +311,21 @@ class Providers:
         ident = paper.get("semantic_id") or ("DOI:" + paper["doi"] if paper.get("doi") else ("ARXIV:" + paper["arxiv"] if paper.get("arxiv") else None))
         if not ident:
             return []
+        import os
+        headers = {'x-api-key': os.environ['SEMANTIC_SCHOLAR_API_KEY']} if os.environ.get('SEMANTIC_SCHOLAR_API_KEY') else None
         out = []
         for direction in directions:
             key = "citedPaper" if direction == "references" else "citingPaper"
-            data = self.net.get(f"https://api.semanticscholar.org/graph/v1/paper/{ident}/{direction}", {"fields": "title,year,authors,externalIds,abstract,openAccessPdf,citationCount,venue", "limit": min(limit, 100)})
-            for row in data.get("data") or []:
+            offset, rows = 0, []
+            while len(rows) < limit:
+                data = self.net.get(f"https://api.semanticscholar.org/graph/v1/paper/{quote(ident, safe=':')}/{direction}", {"fields": "title,year,authors,externalIds,abstract,openAccessPdf,citationCount,venue", "limit": min(limit - len(rows), 100), 'offset': offset}, headers=headers)
+                batch = data.get('data') or []
+                rows.extend(batch)
+                next_offset = data.get('next')
+                if not batch or next_offset is None or next_offset <= offset:
+                    break
+                offset = next_offset
+            for row in rows[:limit]:
                 p = row.get(key) or {}
                 if not p.get("title"):
                     continue
@@ -415,6 +461,7 @@ def import_input_files(run, net, files):
     run.state["candidates"] = merge_candidates(records)
     run.save()
     write_json(run.path / "candidates.json", run.state["candidates"])
+    write_ranked(run)
     return added
 
 
@@ -472,7 +519,7 @@ def record_host_searches(run):
             task = provider + ":" + query
             if task in done:
                 continue
-            searches.append({"provider": provider, "query": query, "url": url_for(query, config.get("years")), "export_hint": WEB_SEARCH_EXPORT_HINTS[provider]})
+            searches.append({"provider": provider, "query": query, "status": "pending", "url": url_for(query, config.get("years")), "export_hint": WEB_SEARCH_EXPORT_HINTS[provider]})
             done.add(task)
             run.event("host_search_required", provider=provider, query=query)
     run.state["queries_done"] = sorted(done)
@@ -488,6 +535,7 @@ def record_host_searches(run):
 
 
 def discover(run, net):
+    from .research import coverage
     config = run.state["config"]
     providers = Providers(net)
     records = list(run.state.get("candidates", []))
@@ -499,59 +547,86 @@ def discover(run, net):
             task = provider + ":" + query
             if task in done:
                 continue
+            entry = {'provider': provider, 'query': query, 'at': now()}
+            run.state.setdefault('search_tasks', {})[task] = entry
             try:
                 rows = getattr(providers, provider)(query, config.get("candidate_limit", 100), config.get("years"))
+                before = len(merge_candidates(records))
                 records.extend(rows)
                 run.state["candidates"] = merge_candidates(records)
+                entry.update(status='completed', count=len(rows), new_unique=len(run.state['candidates']) - before,
+                             possibly_truncated=len(rows) >= min(config.get('candidate_limit', 100), 1000) if provider == 'semantic' else len(rows) >= config.get('candidate_limit', 100))
                 done.add(task)
                 run.state["queries_done"] = sorted(done)
                 run.event("query_completed", provider=provider, query=query, count=len(rows))
             except Exception as exc:
                 # No request URL in diagnostics: optional provider keys can be query parameters.
                 status = re.search(r"'(\d{3}) ", str(exc))
+                entry.update(status='failed', error=type(exc).__name__, http_status=getattr(getattr(exc, 'response', None), 'status_code', None))
                 run.event("query_failed", provider=provider, query=query, error=type(exc).__name__, http_status=status[1] if status else None)
     record_host_searches(run)
     added = import_input_files(run, net, config.get("inputs", []))
     if added:
         records = list(run.state["candidates"])
     run.state["candidates"] = merge_candidates(records)
-    if config.get("citation_hops", 0) and not run.state.get("citations_done"):
-        # Seed from the most relevant hits, not whichever records happened to merge first.
-        seeds = score_candidates(list(run.state["candidates"]), config.get("queries") or [config.get("topic", "")])[:5]
-        records = list(run.state["candidates"])
-        for seed in seeds:
-            try:
-                records.extend(providers.citations(seed))
-            except Exception as exc:
-                run.event("citation_expansion_failed", seed=identity(seed), error=type(exc).__name__)
-        run.state["candidates"] = merge_candidates(records)
-        run.state["citations_done"] = True
+    if config.get("citation_hops", 0):
+        snowball(run, net)
     run.state["status"] = "awaiting_selection"
     write_ranked(run)
     run.save()
     write_json(run.path / "candidates.json", run.state["candidates"])
-    pending = len(run.state.get("host_searches", []))
-    return {"run": str(run.path), "status": run.state["status"], "candidates": len(run.state["candidates"]), "host_searches": pending, "ranked": str(run.path / "candidates_ranked.md"), **({"next": "Open each url in web_sources.json with the host's browsing tools, save the sites' own exports, then resume --run PATH --input FILE; afterwards write selection.json with included [{id, reason}] and excluded [{id, reason}] and resume --selection FILE."} if pending else {"next": "Read candidates_ranked.md; write selection.json (mark core papers with reason \"core: ...\") with included [{id, reason}] and excluded [{id, reason}], then resume --selection FILE."})}
+    report = coverage(run)
+    pending = report['host_pending']
+    return {"run": str(run.path), "status": run.state["status"], "candidates": len(run.state["candidates"]), "host_searches": pending, "coverage": str(run.path / 'coverage.md'), 'warnings': report['warnings'], "ranked": str(run.path / "candidates_ranked.md"), **({"next": "Read coverage.md, complete host searches or record access failures, merge exports with resume --input. Add queries for coverage gaps with resume --query. Then select with reasons; mark core papers."} if pending else {"next": "Read coverage.md and candidates_ranked.md; close important coverage gaps before selection. Write selection.json with included [{id, reason}] and excluded [{id, reason}], then resume --selection FILE."})}
 
 
-def snowball(run, net, limit=20):
+def citation_seeds(run):
+    config = run.state['config']
+    queries = config.get('queries') or [config.get('topic', '')]
+    pool = run.state.get('papers') or run.state.get('candidates', [])
+    eligible = [p for p in pool if p.get('semantic_id') or p.get('doi') or p.get('arxiv')]
+    ranked = score_candidates(list(eligible), queries)
+    chosen = []
+    # Include a representative of each query before filling with global ranking.
+    for query in queries:
+        hits = [p for p in ranked if p not in chosen and any(isinstance(s, dict) and s.get('query') == query for s in p.get('sources', []))]
+        if hits:
+            chosen.append(hits[0])
+    chosen.extend(p for p in ranked if p not in chosen)
+    return chosen[:config.get('citation_seeds', 8)]
+
+
+def snowball(run, net, limit=None):
     """Forward/backward snowballing from the papers already selected (or the top-ranked
     candidates before selection). New candidates are merged and re-ranked."""
     providers = Providers(net)
-    seeds = run.state.get("papers") or score_candidates(list(run.state.get("candidates", [])), run.state["config"].get("queries") or [run.state["config"].get("topic", "")])[:5]
+    seeds = citation_seeds(run)
+    limit = limit or run.state['config'].get('citation_limit', 50)
     before = {p["id"] for p in run.state.get("candidates", [])}
     records = list(run.state.get("candidates", []))
     failures = 0
+    tasks = run.state.setdefault('citation_tasks', {})
     for seed in seeds:
-        try:
-            records.extend(providers.citations(seed, limit=limit))
-        except Exception as exc:
-            failures += 1
-            run.event("citation_expansion_failed", seed=identity(seed), error=type(exc).__name__)
+        for direction in ('references', 'citations'):
+            task = identity(seed) + ':' + direction + ':' + str(limit)
+            if tasks.get(task, {}).get('status') == 'completed':
+                continue
+            try:
+                rows = providers.citations(seed, limit=limit, directions=(direction,))
+                records.extend(rows)
+                run.state['candidates'] = merge_candidates(records)
+                tasks[task] = {'status': 'completed', 'count': len(rows), 'at': now()}
+                run.save()
+            except Exception as exc:
+                failures += 1
+                tasks[task] = {'status': 'failed', 'error': type(exc).__name__, 'at': now()}
+                run.event("citation_expansion_failed", seed=identity(seed), direction=direction, error=type(exc).__name__)
     run.state["candidates"] = merge_candidates(records)
     write_ranked(run)
     run.save()
     write_json(run.path / "candidates.json", run.state["candidates"])
+    from .research import coverage
+    coverage(run)
     new = [p for p in run.state["candidates"] if p["id"] not in before]
     return {"run": str(run.path), "seeds": len(seeds), "failed_seeds": failures, "new_candidates": len(new), "ranked": str(run.path / "candidates_ranked.md"), "next": "Review the new candidates; to import them, write an updated selection.json (keep earlier inclusions) and resume --selection."}
 
@@ -568,10 +643,10 @@ def triage(run):
     for level in order:
         lines.append(f"| {label[level]} | {len(groups[level])} | {work[DEFAULT_TIER[level]]} |")
     readable = groups["fulltext"] + groups["partial"]
-    core = [p for p in readable if str(p.get("inclusion_reason", "")).casefold().startswith("core")]
+    core = [p for p in readable if p.get('core') or str(p.get("inclusion_reason", "")).casefold().startswith(("core", "核心", "综述锚点"))]
     if core:
         # selection.json reasons starting with "core" mark the review's anchors; other full texts get briefs.
-        lines += ["", f"## 建议精读（core，{len(core)} 篇）", "", "其余 %d 篇全文条目建议 `note-template --tier brief`。" % (len(readable) - len(core)), ""]
+        lines += ["", f"## 优先精读（core，{len(core)} 篇）", "", "精读集合不是入选上限。检查每个研究分支、定量比较与争议是否有足够全文锚点；有空缺就继续精读。外围文献可写 brief，但需如实记录实际阅读范围。", ""]
         lines += [f"- {p.get('title', '')[:90]} — `{p['id']}`" for p in core]
     missing = groups["abstract"] + groups["metadata"] + groups["partial"]
     if missing:
@@ -580,6 +655,8 @@ def triage(run):
             link = "https://doi.org/" + p["doi"] if p.get("doi") else (p.get("url") or "")
             lines.append(f"- [{label[p['evidence_level']]}] {p.get('title', '')[:90]} — `{p['id']}` {link}")
     (run.path / "triage.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    from .research import coverage
+    coverage(run)
     return {level: len(groups[level]) for level in order}
 
 
@@ -593,10 +670,21 @@ def prepare_selected(run, mcp, net, selection=None):
             raise ValueError("Selection requires known candidate IDs and a reason for each included paper")
         if len({p["id"] for p in included}) != len(included):
             raise ValueError("Duplicate selected IDs")
+        screened_ids = set()
+        for group in ('included', 'excluded', 'deferred'):
+            for decision in selected.get(group, []):
+                ident = decision.get('id')
+                if ident not in candidates or not str(decision.get('reason', '')).strip():
+                    raise ValueError('Screening decisions need a known ID and a specific reason')
+                if ident in screened_ids:
+                    raise ValueError('Duplicate or conflicting screening decision')
+                screened_ids.add(ident)
         if len(included) > config.get("limit", 100):
             raise ValueError("Selection exceeds --limit")
         prior = {p["id"]: p for p in run.state["papers"]}
-        run.state["papers"] = [prior.get(p["id"], {**candidates[p["id"]], "inclusion_reason": p["reason"], "status": "selected"}) for p in included]
+        if not prior.keys() <= {p['id'] for p in included}:
+            raise ValueError('Incremental selection must retain earlier inclusions; create a new run to change scope')
+        run.state["papers"] = [{**prior.get(p["id"], {**candidates[p["id"]], "status": "selected"}), 'inclusion_reason': p['reason'], 'core': p.get('core', prior.get(p['id'], {}).get('core', False)), 'facets': p.get('facets', prior.get(p['id'], {}).get('facets', []))} for p in included]
         write_json(run.path / "selection.json", selected)
         run.save()
     if not run.state["papers"]:
@@ -634,7 +722,8 @@ def prepare_selected(run, mcp, net, selection=None):
             paper["status"] = "error"
             paper["error"] = type(exc).__name__ + ": " + str(exc)
             run.save()
-    run.state["status"] = "complete" if all(p["status"] == "published" for p in run.state["papers"]) else "awaiting_analysis" if all(p["status"] in ["awaiting_analysis", "published"] for p in run.state["papers"]) else "partial_failure"
+    from .research import completion_status
+    run.state["status"] = completion_status(run) if all(p["status"] == "published" for p in run.state["papers"]) else "awaiting_analysis" if all(p["status"] in ["awaiting_analysis", "published"] for p in run.state["papers"]) else "partial_failure"
     counts = triage(run)
     run.save()
     return {"run": str(run.path), "status": run.state["status"], "evidence": counts, "triage": str(run.path / "triage.md"), "papers": [{"id": p["id"], "key": p.get("item_key"), "status": p["status"], "evidence": p.get("evidence_level")} for p in run.state["papers"]], "next": "Read triage.md first. Upgrade what you can to full text, then write one note per paper at the depth its evidence supports (references/notes.md); publish-note --run PATH --paper ID."}

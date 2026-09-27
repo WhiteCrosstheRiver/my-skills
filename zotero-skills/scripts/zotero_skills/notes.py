@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 import bleach
@@ -129,6 +130,11 @@ def validate_note(note, claims, evidence):
                 errors.append("Full-text claim without full-text evidence: " + str(cid))
     for cid in set(re.findall(r"\[(C\d+)\]", body)) - seen:
         errors.append("Undefined claim reference: " + cid)
+    if schema == 2 and tier == 'deep' and pages and not any(
+        (ref.get('source'), ref.get('page')) in pages
+        for claim in claims for ref in claim.get('evidence', [])
+    ):
+        errors.append('Deep notes must cite the available full-text pages, not only abstracts/metadata')
     if evidence["level"] != "fulltext" and not re.search("全文.*(?:不可得|缺失|未取得|无法|不完整)|部分全文|仅.*(?:摘要|元数据|页)", body):
         errors.append("Missing full-text limitation disclosure")
     if errors:
@@ -194,6 +200,28 @@ const n=new Zotero.Item('note');n.libraryID=P.library;n.parentItemID=parent.id;n
     manifest = {"schema": 1, "published_at": now(), "library_id": library, "item_key": paper["item_key"], "note_key": result["key"], "markdown_attachment_key": attachment["key"], "content_hash": content_hash, "evidence_hash": metadata["source_hash"], "evidence_level": evidence["level"], "note_tier": metadata.get("note_tier", "legacy"), "claims": claims, "note_path": str(directory / "note.md"), "evidence_path": str(directory / "evidence.json"), "reused": result["reused"]}
     manifest.update(claims_hash=claims_hash, version_hash=version_hash)
     write_json(directory / "publication.json", manifest)
+    # Mirror the note into the item's own storage folder (next to its PDF) so the
+    # generated analysis is filed with the paper it belongs to, not only in the run dir.
+    storage_error = None
+    storage = None
+    try:
+        storage = mcp.storage_dir(paper["item_key"], library)
+        if storage:
+            Path(storage).mkdir(parents=True, exist_ok=True)
+            for name in ["note.md", "claims.json", "evidence.json", "publication.json"]:
+                shutil.copyfile(directory / name, Path(storage) / ("zotero-skills-" + name))
+    except Exception as error:
+        storage_error = str(error)
+    manifest["storage_folder"] = storage if not storage_error else None
+    if storage_error:
+        manifest["storage_copy_error"] = storage_error
+    write_json(directory / "publication.json", manifest)
+    if storage and not storage_error:
+        try:
+            shutil.copyfile(directory / "publication.json", Path(storage) / "zotero-skills-publication.json")
+        except Exception as error:
+            manifest["storage_copy_error"] = str(error)
+            write_json(directory / "publication.json", manifest)
     archive = run.path.parents[1] / "notes" / str(library) / paper["item_key"] / version_hash
     archive.mkdir(parents=True, exist_ok=True)
     for name in ["note.md", "claims.json", "evidence.json", "publication.json"]:
@@ -205,6 +233,7 @@ const n=new Zotero.Item('note');n.libraryID=P.library;n.parentItemID=parent.id;n
             target.write_bytes((directory / name).read_bytes())
     paper.update(status="published", note_key=result["key"], note_hash=content_hash, markdown_attachment_key=attachment["key"])
     if all(p["status"] == "published" for p in run.state["papers"]):
-        run.state["status"] = "complete"
+        from .research import completion_status
+        run.state["status"] = completion_status(run)
     run.save()
     return manifest

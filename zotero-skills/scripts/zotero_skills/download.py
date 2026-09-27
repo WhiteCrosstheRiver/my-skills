@@ -67,9 +67,10 @@ def unpaywall(paper, net):
     data = net.get('https://api.unpaywall.org/v2/' + quote(ident, safe='/'), {'email': email})
     if normalized_doi(data.get('doi')) != ident:
         raise ValueError('Resolver DOI mismatch')
-    return [{'url': loc.get('url_for_pdf') or loc.get('url_for_landing_page'),
+    return [{'url': url,
              'version': loc.get('version'), 'license': loc.get('license')}
-            for loc in data.get('oa_locations', []) if loc.get('url_for_pdf') or loc.get('url_for_landing_page')]
+            for loc in data.get('oa_locations', [])
+            for url in dict.fromkeys([loc.get('url_for_pdf'), loc.get('url_for_landing_page')]) if url]
 
 
 def semantic(paper, net):
@@ -256,22 +257,33 @@ def download_pdf(paper, directory, mcp, net, library=1, snapshot=None, fallback_
         for url in urls:
             if attempt({'url': url}, 'primary'):
                 return attach()
+        # Some exports have only a publisher/author landing page and no DOI. Its
+        # citation metadata is usable only after DOI/title identity verification.
+        landing = paper.get('url') or snap.get('item', {}).get('url')
+        if landing and attempt({'url': landing}, 'article-page'):
+            return attach()
     for candidate in paper.get('verified_pdf_links', []):
         if attempt(candidate, 'host-verified'):
             return attach()
-    for name, resolve in RESOLVERS:
-        if resolvers is not None and name not in resolvers:
-            continue
-        try:
-            candidates = resolve(paper, net)
-            report['attempts'].append({'provider': name, 'stage': 'resolve', 'status': 'resolved', 'count': len(candidates), 'at': now()})
-        except Exception as exc:
-            report['attempts'].append({'provider': name, 'stage': 'resolve', 'status': 'unconfigured' if isinstance(exc, LookupError) else 'failed', 'reason': failure(exc), 'at': now()})
-            candidates = []
-        write_json(report_path, report)
-        for candidate in candidates:
-            if attempt(candidate, name):
-                return attach()
+    versions = [paper]
+    if paper.get('preprint_doi') and normalized_doi(paper['preprint_doi']) != normalized_doi(paper.get('doi')):
+        versions.append({**paper, 'doi': paper['preprint_doi'], '_version': 'preprint'})
+    for version in versions:
+        for name, resolve in RESOLVERS:
+            if resolvers is not None and name not in resolvers:
+                continue
+            try:
+                candidates = resolve(version, net)
+                report['attempts'].append({'provider': name, 'stage': 'resolve', 'doi': version.get('doi'), 'status': 'resolved', 'count': len(candidates), 'at': now()})
+            except Exception as exc:
+                report['attempts'].append({'provider': name, 'stage': 'resolve', 'status': 'unconfigured' if isinstance(exc, LookupError) else 'failed', 'reason': failure(exc), 'at': now()})
+                candidates = []
+            write_json(report_path, report)
+            for candidate in candidates:
+                if version.get('_version'):
+                    candidate = {**candidate, 'version': version['_version'], 'resolved_doi': version['doi']}
+                if attempt(candidate, name):
+                    return attach()
     report.update(status='unavailable')
     write_json(report_path, report)
     return report
@@ -314,6 +326,9 @@ def execute(args):
                         results.append({'item_key': key[1], 'title': paper['title'], **result})
                     if result['status'] == 'downloaded':
                         paper['pdf_attachment_key'] = result['attachment_key']
+                        paper['evidence_refresh_required'] = True
+                        run.save()
+                    elif result['status'] == 'skipped_existing' and key[1] in result.get('parent_keys', []) and paper.get('evidence_level') != 'fulltext':
                         paper['evidence_refresh_required'] = True
                         run.save()
     output = args.output / 'downloads' / ('backfill-' + now().replace(':', '-') + '.json')

@@ -245,6 +245,28 @@ if(!x || x.deleted) throw new Error('Item missing or trashed: '+P.key);
 return {item:x.toJSON(), notes: await Promise.all(x.isRegularItem()?x.getNotes().map(async id=>{const n=await Zotero.Items.getAsync(id);return {key:n.key,html:n.getNote(),tags:n.getTags()}}):[]), attachments:await Promise.all(x.isRegularItem()?x.getAttachments().map(async id=>{const a=await Zotero.Items.getAsync(id);return {key:a.key,title:a.getField('title'),contentType:a.attachmentContentType,path:await a.getFilePathAsync(),url:a.getField('url'),annotations:a.isPDFAttachment()?a.getAnnotations().map(n=>n.toJSON()):[]}}):[])};
 """, key=key, library=library)
 
+    def storage_dir(self, key, library=1):
+        """Local storage folder holding this item's files (the PDF's folder).
+
+        Prefers the first PDF attachment; falls back to any stored attachment.
+        Returns None for items with no stored attachments.
+        """
+        return self.js("""
+const item=await Zotero.Items.getByLibraryAndKeyAsync(P.library,P.key);
+if(!item||item.deleted)throw new Error('Item missing or trashed: '+P.key);
+const atts=item.getAttachments().map(id=>Zotero.Items.getAsync(id));
+let fallback=null;
+for(const a of await Promise.all(atts)){
+  if(a.deleted)continue;
+  const path=await a.getFilePathAsync().catch(()=>null);
+  if(!path)continue;
+  const dir=PathUtils.parent(path);
+  if(a.attachmentContentType==='application/pdf')return {dir};
+  if(!fallback)fallback=dir;
+}
+return {dir:fallback};
+""", key=key, library=library)["dir"]
+
     def import_paper(self, paper, collection, library=1):
         # Marker recovers a timed-out create even for items without a DOI.
         # Reuse never overwrites: an existing entry is supplemented field-by-field

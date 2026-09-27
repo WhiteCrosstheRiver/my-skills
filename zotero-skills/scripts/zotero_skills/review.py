@@ -1,5 +1,6 @@
 """Host-written synthesis, grounded citations, offline rendering and immutable versions."""
 import csv
+from collections import Counter
 import html
 import json
 import re
@@ -14,6 +15,7 @@ from .core import write_lock_path
 from .core import MCP, Run, digest, lock, now, read_json, write_json
 from .library import enumerate_items
 from .notes import MD, split_frontmatter, validate_note
+from .research import screening_summary
 
 ASSETS = Path(__file__).parent / 'assets'
 CITATION = re.compile(r'\[(R\d+)\]')
@@ -46,8 +48,14 @@ def section(body, heading):
 
 def prepare(output, title, source_runs=(), collection=None, topic=None, library=1, mcp=None):
     publications = {}
+    scope_runs, unpublished = [], []
     for source in source_runs:
         run = Run(source)
+        scope_runs.append({'run': str(run.path), **screening_summary(run),
+                           'selected': len(run.state['papers']), 'status': run.state['status'],
+                           'host_pending': sum(s.get('status', 'pending') == 'pending' for s in run.state.get('host_searches', [])),
+                           'failed_queries': sum(t['status'] == 'failed' for t in run.state.get('search_tasks', {}).values()),
+                           'failed_citation_tasks': sum(t['status'] == 'failed' for t in run.state.get('citation_tasks', {}).values())})
         for paper in run.state['papers']:
             path = run.paper_dir(paper) / 'publication.json'
             if paper['status'] == 'published' and path.is_file():
@@ -56,12 +64,16 @@ def prepare(output, title, source_runs=(), collection=None, topic=None, library=
                 previous = publications.get(key)
                 if previous is None or pub['published_at'] > read_json(previous)['published_at']:
                     publications[key] = path
+            else:
+                unpublished.append({'key': paper.get('item_key'), 'title': paper['title'], 'status': paper['status']})
     if collection or topic:
         for item in enumerate_items(mcp or MCP(), library, collection, topic):
             files = list((Path(output) / 'notes' / str(library) / item['key']).glob('*/publication.json'))
             if files:
                 path = max(files, key=lambda p: read_json(p)['published_at'])
                 publications[str(library) + ':' + item['key']] = path
+            else:
+                unpublished.append({'key': item['key'], 'title': item.get('title', ''), 'status': 'no_published_note'})
     if not publications:
         raise ValueError('No published, validated notes in the selected scope')
     libraries = {read_json(path)['library_id'] for path in publications.values()}
@@ -95,16 +107,65 @@ def prepare(output, title, source_runs=(), collection=None, topic=None, library=
         sources.append(entry)
         tier = meta.get('note_tier', 'legacy')
         entry['note_tier'] = tier
+        entry['fulltext_claims'] = sum(any(ref.get('page') and ref.get('source') not in ('abstract', 'metadata') for ref in c.get('evidence', [])) for c in claims)
         fields = MATRIX_FIELDS[tier]
-        matrix.append({'key': key, 'title': entry['title'], 'tier': tier, 'strength': evidence['level'], **{name: section(body, heading) if heading else '' for name, heading in fields.items()}, 'claim_ids': [c['id'] for c in claims]})
-    run.state.update(sources=sources, status='awaiting_synthesis')
+        matrix.append({'key': key, 'title': entry['title'], 'tier': tier, 'strength': evidence['level'], 'date': evidence.get('metadata', {}).get('date', ''),
+                       'venue': evidence.get('metadata', {}).get('publicationTitle', ''), **{name: section(body, heading) if heading else '' for name, heading in fields.items()},
+                       'intuition': section(body, '核心思路'), 'connections': section(body, '关联与启发') or section(body, '研究启发'),
+                       'reproducibility': section(body, '代码、数据与复现'), 'reading_scope': section(body, '证据索引') or section(body, '证据索引与生成记录'),
+                       'claim_ids': [c['id'] for c in claims]})
+    published_keys = {s['key'] for s in sources}
+    unpublished = list({(p.get('key'), p['title']): p for p in unpublished if p.get('key') not in published_keys}.values())
+    scope = {'source_runs': scope_runs, 'unpublished': unpublished,
+             'included_notes': len(sources), 'tiers': dict(Counter(s['note_tier'] for s in sources)),
+             'evidence': dict(Counter(s['evidence_level'] for s in sources)),
+             'fulltext_without_page_claims': [s['key'] for s in sources if s['evidence_level'] == 'fulltext' and not s['fulltext_claims']],
+             'scope_incomplete': bool(unpublished or any(r['unassessed'] or r['deferred'] or r['host_pending'] or r['failed_queries'] or r['failed_citation_tasks'] for r in scope_runs)),
+             'discovery_scope_known': any(r['candidates'] for r in scope_runs)}
+    run.state.update(sources=sources, scope=scope, status='awaiting_synthesis')
     run.save()
     write_json(run.path / 'matrix.json', matrix)
+    write_json(run.path / 'review-scope.json', scope)
+    # Complete claims and locators, not just matrix snippets. The host can group
+    # these into arguments without losing qualifiers or primary-source pointers.
+    write_json(run.path / 'evidence-cards.json', [
+        {'ref': s['key'] + ':' + c['id'], 'title': s['title'], 'tier': s['note_tier'],
+         'evidence_level': s['evidence_level'], 'claim': c, 'note': s['note_path']}
+        for s in sources for c in s['claims']])
+    (run.path / 'synthesis-workbook.md').write_text(
+        '# 综述分析工作底稿（待作者完成）\n\n' + scope_disclosure(scope) +
+        '\n\n先读 review-scope.json、matrix.json 与 evidence-cards.json。待筛/待读不能算作排除；重要分支证据不足时回到检索和精读。\n\n'
+        '## 研究问题与读者路径\n\n逐个明确问题、读者需要的概念、回答该问题的章节、尚缺的证据。\n\n'
+        '## 问题—证据地图\n\n| 问题 | 支持 claim refs | 反向/限定证据 | 适用条件 | 仍未知 |\n|---|---|---|---|---|\n\n'
+        '## 可比性与分歧\n\n| 比较 | 对象/数据划分 | 指标/单位 | 条件/预算 | 可比程度 | 分歧的可能解释 |\n|---|---|---|---|---|---|\n\n'
+        '## 从直觉到机制\n\n每个重要机制：为什么需要 → 最小例子 → 输入/步骤/输出 → 公式与符号 → 原文证据 → 失效边界。例子如为示意需明确标注。\n\n'
+        '## 综合判断与下一步\n\n每条判断列出原始 claim refs、复现/互补/分歧/外推关系、假设、不能推出什么，以及能区分解释的下一项实验。\n', encoding='utf-8')
     with (run.path / 'matrix.csv').open('w', encoding='utf-8-sig', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=list(matrix[0]))
         writer.writeheader(); writer.writerows(matrix)
     tiers = {t: sum(s['note_tier'] == t for s in sources) for t in ['deep', 'brief', 'stub', 'legacy']}
-    return {'run': str(run.path), 'papers': len(sources), 'tiers': tiers, 'status': 'awaiting_synthesis', 'next': 'Read matrix.json and source notes. Write review.md using [R1] citations and review-claims.json [{id,statement,kind,refs:[ITEMKEY:C1]}]. Independently audit before review --publish --run PATH.'}
+    return {'run': str(run.path), 'papers': len(sources), 'tiers': tiers, 'scope_incomplete': scope['scope_incomplete'],
+            'scope': str(run.path / 'review-scope.json'), 'workbook': str(run.path / 'synthesis-workbook.md'), 'status': 'awaiting_synthesis',
+            'next': 'Read review-scope.json first: unfinished screening/notes mean an interim subset, not domain completion. Fill synthesis-workbook.md from evidence-cards.json and full notes; deepen missing anchors. Write review.md and review-claims.json, then independently audit.'}
+
+
+def scope_disclosure(scope):
+    lines = [f"本版纳入 {scope['included_notes']} 篇已发布笔记；笔记深度：" + '、'.join(f'{k} {v}' for k, v in scope['tiers'].items()) + '。',
+             '证据取得情况：' + '、'.join(f'{k} {v}' for k, v in scope['evidence'].items()) + '。笔记深度不等于全文取得情况。']
+    for row in scope['source_runs']:
+        if row['candidates']:
+            lines.append(f"来源检索批次：{row['candidates']} 候选，{row['included']} 入选，{row['excluded']} 排除，{row['deferred']} 暂缓，{row['unassessed']} 未筛选。不同批次可能重叠，不相加为唯一文献数。")
+        if row.get('host_pending') or row.get('failed_queries') or row.get('failed_citation_tasks'):
+            lines.append(f"该批次还有 {row.get('host_pending', 0)} 个未完成浏览器检索、{row.get('failed_queries', 0)} 个失败检索、{row.get('failed_citation_tasks', 0)} 个失败引文任务。")
+    if scope.get('fulltext_without_page_claims'):
+        lines.append(f"{len(scope['fulltext_without_page_claims'])} 篇已取得全文的笔记没有页级声明引用，不能据此声称已完成全文精读。")
+    if scope['unpublished']:
+        lines.append(f"范围内另有 {len(scope['unpublished'])} 篇尚无可纳入的已发布笔记。")
+    if scope['scope_incomplete']:
+        lines.append('本版是部分证据的阶段性综述，尚不能声称完成该领域的全面梳理。')
+    if not scope['discovery_scope_known']:
+        lines.append('输入未包含原始检索范围；无法由已发布笔记数量推断领域覆盖率。')
+    return '\n\n'.join(lines)
 
 
 def validate(run):
@@ -161,7 +222,7 @@ def difference(previous, current, claims):
 
 def build(run, mcp=None):
     text, claims, chapters, lookup = validate(run)
-    analysis_hash = digest(json.dumps([text, claims, run.state['sources']], ensure_ascii=False, sort_keys=True))
+    analysis_hash = analysis_digest(run, text, claims)
     renderer_hash = digest(json.dumps({str(p.relative_to(ASSETS)): digest(p.read_bytes()) for p in sorted(ASSETS.rglob('*')) if p.is_file()}, sort_keys=True))
     content_hash = digest(analysis_hash + renderer_hash)
     audit = read_json(run.path / 'audit.json')
@@ -171,7 +232,12 @@ def build(run, mcp=None):
         verify_artifact(Path(run.state['version_path']))
         if mcp and run.state.get('status') == 'rendered':
             publish_zotero(run, mcp)
-        return {'version': run.state['version_path'], 'reused': True, 'item_key': run.state.get('item_key')}
+        prior = read_json(Path(run.state['version_path']) / 'manifest.json')
+        desktop_copy = deliver_to_desktop(Path(run.state['version_path']).parent, Path(run.state['version_path']).name, prior.get('title', 'review'))
+        result = {'version': run.state['version_path'], 'reused': True, 'item_key': run.state.get('item_key')}
+        if desktop_copy:
+            result['desktop_copy'] = str(desktop_copy)
+        return result
     root = run.path.parents[1] / 'reviews' / digest(run.state['config']['title'])[:16]
     root.mkdir(parents=True, exist_ok=True)
     with lock(root / '.lock'):
@@ -187,7 +253,12 @@ def build(run, mcp=None):
                 write_json(root / 'latest.json', {'version': candidate.parent.name, 'content_hash': content_hash})
                 if mcp:
                     publish_zotero(run, mcp)
-                return {'version': str(candidate.parent), 'reused': True, 'item_key': run.state.get('item_key')}
+                prior_title = read_json(candidate).get('title', 'review')
+                desktop_copy = deliver_to_desktop(root, candidate.parent.name, prior_title)
+                result = {'version': str(candidate.parent), 'reused': True, 'item_key': run.state.get('item_key')}
+                if desktop_copy:
+                    result['desktop_copy'] = str(desktop_copy)
+                return result
         latest = read_json(root / 'latest.json') if (root / 'latest.json').exists() else None
         previous = read_json(root / latest['version'] / 'manifest.json') if latest else None
         version = datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8]
@@ -197,6 +268,13 @@ def build(run, mcp=None):
         shutil.copytree(ASSETS / 'katex', stage / 'katex')
         for name in ['review.md', 'review-claims.json', 'matrix.json', 'matrix.csv', 'audit.json']:
             shutil.copyfile(run.path / name, stage / name)
+        if 'scope' in run.state:
+            write_json(stage / 'review-scope.json', run.state['scope'])
+            for name in ['evidence-cards.json', 'synthesis-workbook.md']:
+                shutil.copyfile(run.path / name, stage / name)
+            disclosure = scope_disclosure(run.state['scope'])
+            chapters.insert(0, {'id': 'scope', 'title': '本版证据范围', 'body': disclosure, 'refs': []})
+            text = '# 本版证据范围\n\n' + disclosure + '\n\n' + text
         by_id = {c['id']: c for c in claims}
         for chapter in chapters:
             chapter['html'] = render_body(CITATION.sub(lambda m: '[' + m[1] + '](#evidence-' + m[1] + ')', chapter['body']))
@@ -244,12 +322,51 @@ def build(run, mcp=None):
         run.save()
     if mcp:
         publish_zotero(run, mcp)
-    return {'version': str(dest), 'reused': False, 'item_key': run.state.get('item_key'), 'changes': changes}
+    desktop_copy = deliver_to_desktop(root, version, manifest['title'])
+    result = {'version': str(dest), 'reused': False, 'item_key': run.state.get('item_key'), 'changes': changes}
+    if desktop_copy:
+        result['desktop_copy'] = str(desktop_copy)
+    return result
+
+
+def review_destination():
+    """Where finished review versions are mirrored. Desktop by default."""
+    import os
+    return Path(os.environ.get("ZOTERO_SKILLS_REVIEW_DEST", str(Path.home() / "Desktop")))
+
+
+def deliver_to_desktop(root, version, title):
+    """Copy the immutable version directory (review.html + evidence pack) to the
+    user-facing destination. A pure mirror: the canonical version stays under reviews/."""
+    dest_root = review_destination().resolve()
+    if not dest_root.is_dir():
+        return None
+    safe_title = re.sub(r'[\\/:*?"<>|]+', '', title).strip() or 'review'
+    target = dest_root / (safe_title + '-' + version)
+    try:
+        if not target.resolve().is_relative_to(dest_root):
+            raise ValueError('Review mirror target is outside its destination')
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(root / version, target)
+        offline_zip = root / (version + '-offline.zip')
+        if offline_zip.is_file():
+            shutil.copyfile(offline_zip, dest_root / (safe_title + '-' + version + '-offline.zip'))
+    except OSError:
+        return None
+    return target
 
 
 def audit_hash(run):
     text, claims, _, _ = validate(run)
-    return digest(json.dumps([text, claims, run.state['sources']], ensure_ascii=False, sort_keys=True))
+    return analysis_digest(run, text, claims)
+
+
+def analysis_digest(run, text, claims):
+    payload = [text, claims, run.state['sources']]
+    if 'scope' in run.state:
+        payload.append(run.state['scope'])
+    return digest(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
 def verify_artifact(directory):

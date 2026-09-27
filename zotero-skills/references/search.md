@@ -4,7 +4,7 @@ The CLI is a resumable workflow, not a second LLM. Run it from the skill folder.
 
 ## 1. Plan the queries before running anything
 
-A single phrase finds only papers worded like that phrase. Before `deep-search`, write 4–8 queries that cover different **axes**, not synonyms of one phrase:
+A single phrase finds only papers worded like that phrase. Map terminology and research questions first. Broad domains may start with 8–16 short queries and grow according to coverage; this is not a quota. Include English terms, acronyms and older terminology even for a Chinese input. Cover different **axes**, not just synonyms:
 
 - core method names and their common abbreviations (e.g. "equivariant interatomic potential", "MACE", "NequIP")
 - the problem stated without method words ("DFT accuracy molecular dynamics large systems")
@@ -14,6 +14,10 @@ A single phrase finds only papers worded like that phrase. Before `deep-search`,
 
 Keep each query short (3–6 content words). Use quotes only around true fixed phrases.
 
+The host can persist a plan with `facets: [{name, queries: [...]}]`, plus optional `topic`, `scope`, `questions` and `stop_rule`. Run `deep-search --topic DOMAIN --plan FILE`. Topic-only calls write an `awaiting_query_plan` scaffold; fill it and immediately continue with `resume --run PATH --plan FILE --discover`. Do not hand the ordinary planning work back to the user.
+
+For electrolyte MLIPs, separate model families (GAP, DeePMD, equivariant/universal models), active learning, liquid structure/solvation, transport, organic/aqueous/concentrated liquids, ionic liquids/deep eutectics, interfaces/SEI/reactivity, long-range charge, uncertainty/transferability and experimental validation. Treat adjacent systems as labelled branches rather than mixing their conclusions. This example illustrates domain decomposition, not a universal checklist.
+
 ```text
 python scripts/zotero_cli.py deep-search --topic "机器学习原子势" \
   --query "machine learning interatomic potentials" --query "equivariant interatomic potential" \
@@ -21,7 +25,18 @@ python scripts/zotero_cli.py deep-search --topic "机器学习原子势" \
   --years 2018-2026 --limit 150 --collection-name "机器学习原子势"
 ```
 
-Providers: `semantic crossref arxiv` by default (Europe PMC for biomedical topics; OpenAlex with `OPENALEX_API_KEY`; Semantic Scholar is less rate-limited with `SEMANTIC_SCHOLAR_API_KEY`). Semantic Scholar uses its relevance-ranked search (up to 1000 results per query). arXiv queries are sent as an AND of terms, not one exact phrase. `--citation-hops 1` (default) runs backward **and** forward citation expansion from the 5 most relevant hits.
+Providers: `semantic crossref arxiv` by default (Europe PMC for biomedical topics; OpenAlex with `OPENALEX_API_KEY`). Semantic Scholar uses relevance search and falls back after HTTP 429 to bulk retrieval; the fallback is recorded because bulk order is not relevance order. arXiv uses AND between terms, so overlong queries can still be restrictive. `--citation-hops 1` runs backward/forward expansion with configurable `--citation-seeds` (8) and `--citation-limit` (50 per direction). Seeds span query hits; citation calls support pagination and API-key authentication.
+
+Adapter pagination/endpoint semantics: [Semantic Scholar official API documentation](https://api.semanticscholar.org/api-docs/snippets) and [official pagination tutorial](https://www.semanticscholar.org/product/api/tutorial). Bulk retrieval can also be rate limited; a fallback is not a guarantee of availability.
+
+Defaults: 150 candidates per provider/query, 200 selected papers. These are execution budgets, not domain-size assumptions. Inspect `coverage.md`/`.json`: failures, zero hits, cap hits, unique additions, research facets, pending browser work and evidence levels. A full page suggests truncation, not exhaustion. Extend without restarting:
+
+```text
+resume --run PATH --query "deep potential electrolyte transport" --query "electrolyte force field transferability"
+resume --run PATH --candidate-limit 300 --discover
+resume --run PATH --limit 400 --selection selection.json
+coverage --run PATH
+```
 
 Failed queries stay in `run.json` with their HTTP status; read them before claiming coverage and retry with `resume --run PATH --discover`.
 
@@ -35,9 +50,13 @@ python scripts/zotero_cli.py resume --run PATH --input scholar.bib --input xmol.
 
 Merged entries are DOI-resolved via Crossref and deduplicated. If a URL could not be read (login, captcha), record that instead of pretending it was covered.
 
+Record outcomes with `resume --run PATH --host-status FILE`: a JSON list of `{provider, query, status, note}`. Status is `completed`, `blocked` or `empty`; note identifies inspected results/export or the access failure. Generated links and imported exports alone do not prove every query was completed.
+
 ## 3. Select from the ranked list
 
 Read `candidates_ranked.md`, not the raw JSON. It lists every candidate with a transparent score (query-term hits in title/abstract, number of providers that found it, citations, whether an abstract/PDF exists) plus an abstract snippet. The score is triage only; you decide.
+
+The ranked snippet is only a navigation aid: do not exclude on a truncated abstract. `screening-batch --run PATH --size 40` writes the next unassessed records with full abstracts. Save each batch's decisions as `included`/`excluded`/`deferred` lists, then `screening-batch --run PATH --decisions FILE` merges decisions into cumulative `selection.json` and returns the next batch, without importing anything. This also supports all-excluded batches. Revisit deferred items separately. After screening, `resume --selection PATH/selection.json` imports the relevant set; a batch size does not cap total inclusions.
 
 Preprints and their journal versions are merged (arXiv/ChemRxiv/bioRxiv/SSRN DOIs are kept as `preprint_doi`), so one paper appears once.
 
@@ -45,8 +64,8 @@ Selection rules:
 
 1. **Include** everything on-topic, plus adjacent work that could change the review's framing (neighbouring methods, competing approaches, key applications). Recall matters at import time: an extra library item is cheap.
 2. **Exclude** noise with a specific reason each (off-domain keyword hits, errata, editorials). No blanket reasons for on-topic items.
-3. Mark the **core set** in the reasons: the 10–20 papers that the review will lean on (foundational methods, strongest results, direct disagreements). Write `"reason": "core: …"`. These get deep notes; the rest get briefs. Import breadth and reading depth are separate decisions.
-4. `--limit` caps how many can be included. Set it to the size of the relevant pool, not a demo number.
+3. Mark anchors with `"core": true` and optional `"facets": ["solvation"]`; legacy `reason: core: ...` works too. Select anchors per question and branch: foundations, mechanisms, quantitative tests, disagreements. There is no fixed total of 3, 10 or 20 anchors. Peripheral papers can receive briefs; don't downgrade core full texts for convenience.
+4. `--limit` caps inclusions; raise it to fit the relevant pool. Screen every candidate in manageable batches. Missing decisions are `unassessed`, never implicit exclusions. Put genuinely pending decisions into `deferred: [{id, reason}]`. Never use 'first batch/core only/budget' as a relevance exclusion. Continue subsequent batches autonomously within the user's scope. Keep all prior inclusions when updating selection.json; the CLI rejects silent removal.
 
 `selection.json`:
 
@@ -64,7 +83,7 @@ This imports or reuses items (existing fields, notes and attachments are never o
 
 ## 4. Snowball from what you chose
 
-After selection, run `resume --run PATH --snowball`. It expands references and citing papers of the selected set, re-ranks, and reports how many candidates are new. Add worthwhile ones to `selection.json` (keep earlier inclusions) and `resume --selection` again. One round is usually enough; stop when a round adds few on-topic papers.
+After selection, run `resume --run PATH --snowball`. It expands a budgeted, diverse seed set and re-ranks. Completed seed/direction tasks are checkpointed; failures remain retryable. Add worthwhile papers (retain earlier inclusions) and continue. Inspect anchor bibliographies if a citation API fails. Stop when major questions and disagreements have evidence and successive expansions add no important on-topic branch, or the user's budget is reached. Failure-induced low yield is not saturation. Record the stopping reason and unresolved gaps.
 
 ## 5. Full text before notes
 
