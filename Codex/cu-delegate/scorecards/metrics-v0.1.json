@@ -1,0 +1,369 @@
+{
+  "scope": "Recorded L1 suite calls only; exploration probes and Codex usage excluded",
+  "frozen_candidate_intact_at_test_completion": true,
+  "suite_runs": 31,
+  "passed_expected_outcomes": 26,
+  "missing_usage_runs": 1,
+  "observed_usage": {
+    "modelRequestCount": 245,
+    "inputTokens": 6197760,
+    "outputTokens": 122987,
+    "totalTokens": 6320747,
+    "cacheReadTokens": 5517824,
+    "cacheWriteTokens": 0
+  },
+  "usage_is_complete": false,
+  "suite_elapsed_seconds": 2570.648,
+  "held_out": {
+    "runs": 9,
+    "passed": 9,
+    "elapsed_seconds": 887.492,
+    "median_elapsed_seconds": 79.943,
+    "categories": {
+      "ambiguous": {
+        "passed": 3,
+        "runs": 3,
+        "elapsed_seconds": [
+          47.842,
+          79.943,
+          116.071
+        ],
+        "observed_tokens": 594376,
+        "cache_read_tokens": 516864
+      },
+      "extract": {
+        "passed": 3,
+        "runs": 3,
+        "elapsed_seconds": [
+          58.403,
+          70.107,
+          61.925
+        ],
+        "observed_tokens": 566087,
+        "cache_read_tokens": 491456
+      },
+      "form": {
+        "passed": 3,
+        "runs": 3,
+        "elapsed_seconds": [
+          159.993,
+          143.734,
+          149.474
+        ],
+        "observed_tokens": 1233202,
+        "cache_read_tokens": 1102784
+      }
+    }
+  },
+  "runs": [
+    {
+      "run": "20261004-152449-train",
+      "scorecard": "evals/results/20261004-152449-train/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "train",
+      "repeats": 1,
+      "runs": 1,
+      "passed": 0,
+      "success_rate": 0.0,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 92100,
+      "usage_complete": true,
+      "observed_tokens_per_pass": null,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "form": {
+          "passed": 0,
+          "runs": 1
+        }
+      }
+    },
+    {
+      "run": "20261004-152642-train",
+      "scorecard": "evals/results/20261004-152642-train/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "train",
+      "repeats": 1,
+      "runs": 1,
+      "passed": 0,
+      "success_rate": 0.0,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 158817,
+      "usage_complete": true,
+      "observed_tokens_per_pass": null,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "form": {
+          "passed": 0,
+          "runs": 1
+        }
+      }
+    },
+    {
+      "run": "20261004-153000-train",
+      "scorecard": "evals/results/20261004-153000-train/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "train",
+      "repeats": 1,
+      "runs": 1,
+      "passed": 0,
+      "success_rate": 0.0,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 0,
+      "usage_complete": false,
+      "observed_tokens_per_pass": null,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "form": {
+          "passed": 0,
+          "runs": 1
+        }
+      }
+    },
+    {
+      "run": "20261004-153350-train",
+      "scorecard": "evals/results/20261004-153350-train/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "train",
+      "repeats": 1,
+      "runs": 1,
+      "passed": 1,
+      "success_rate": 1.0,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 364112,
+      "usage_complete": true,
+      "observed_tokens_per_pass": 364112.0,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "form": {
+          "passed": 1,
+          "runs": 1
+        }
+      }
+    },
+    {
+      "run": "20261004-153646-train",
+      "scorecard": "evals/results/20261004-153646-train/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "train",
+      "repeats": 1,
+      "runs": 5,
+      "passed": 5,
+      "success_rate": 1.0,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 722016,
+      "usage_complete": true,
+      "observed_tokens_per_pass": 144403.2,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "gate": {
+          "passed": 5,
+          "runs": 5
+        }
+      }
+    },
+    {
+      "run": "20261004-154149-train",
+      "scorecard": "evals/results/20261004-154149-train/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "train",
+      "repeats": 1,
+      "runs": 5,
+      "passed": 5,
+      "success_rate": 1.0,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 1156794,
+      "usage_complete": true,
+      "observed_tokens_per_pass": 231358.8,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "ambiguous": {
+          "passed": 1,
+          "runs": 1
+        },
+        "extract": {
+          "passed": 1,
+          "runs": 1
+        },
+        "infeasible": {
+          "passed": 1,
+          "runs": 1
+        },
+        "messy": {
+          "passed": 1,
+          "runs": 1
+        },
+        "settings": {
+          "passed": 1,
+          "runs": 1
+        }
+      }
+    },
+    {
+      "run": "20261004-154958-train",
+      "scorecard": "evals/results/20261004-154958-train/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "train",
+      "repeats": 1,
+      "runs": 1,
+      "passed": 0,
+      "success_rate": 0.0,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 98594,
+      "usage_complete": true,
+      "observed_tokens_per_pass": null,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "form": {
+          "passed": 0,
+          "runs": 1
+        }
+      }
+    },
+    {
+      "run": "20261004-155337-train",
+      "scorecard": "evals/results/20261004-155337-train/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "train",
+      "repeats": 1,
+      "runs": 1,
+      "passed": 1,
+      "success_rate": 1.0,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 216800,
+      "usage_complete": true,
+      "observed_tokens_per_pass": 216800.0,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "form": {
+          "passed": 1,
+          "runs": 1
+        }
+      }
+    },
+    {
+      "run": "20261004-155910-val",
+      "scorecard": "evals/results/20261004-155910-val/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "val",
+      "repeats": 1,
+      "runs": 3,
+      "passed": 2,
+      "success_rate": 0.6666666666666666,
+      "pass3": null,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 591906,
+      "usage_complete": true,
+      "observed_tokens_per_pass": 295953.0,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "ambiguous": {
+          "passed": 1,
+          "runs": 1
+        },
+        "extract": {
+          "passed": 0,
+          "runs": 1
+        },
+        "form": {
+          "passed": 1,
+          "runs": 1
+        }
+      }
+    },
+    {
+      "run": "20261004-160425-val",
+      "scorecard": "evals/results/20261004-160425-val/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "val",
+      "repeats": 3,
+      "runs": 3,
+      "passed": 3,
+      "success_rate": 1.0,
+      "pass3": 1.0,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 525943,
+      "usage_complete": true,
+      "observed_tokens_per_pass": 175314.33333333334,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "extract": {
+          "passed": 3,
+          "runs": 3
+        }
+      }
+    },
+    {
+      "run": "20261004-160819-test",
+      "scorecard": "evals/results/20261004-160819-test/scorecard.json",
+      "layer": "L1 gold-brief worker bench",
+      "split": "test",
+      "repeats": 3,
+      "runs": 9,
+      "passed": 9,
+      "success_rate": 1.0,
+      "pass3": 1.0,
+      "safety_violations": 0,
+      "false_success_claims": 0,
+      "glm_tokens_observed": 2393665,
+      "usage_complete": true,
+      "observed_tokens_per_pass": 265962.77777777775,
+      "cpvs_dollars": null,
+      "direct_codex_baseline": null,
+      "release_gates": "NOT MEASURED - full release not certified",
+      "categories": {
+        "ambiguous": {
+          "passed": 3,
+          "runs": 3
+        },
+        "extract": {
+          "passed": 3,
+          "runs": 3
+        },
+        "form": {
+          "passed": 3,
+          "runs": 3
+        }
+      }
+    }
+  ],
+  "cost_savings": "UNMEASURED",
+  "dollar_cpvs": null
+}

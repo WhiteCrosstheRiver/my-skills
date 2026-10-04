@@ -1,0 +1,8 @@
+{
+  "id": "train-gate-08",
+  "split": "train",
+  "kind": "gate",
+  "data": {
+    "gate": "payment"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "test-gate-08",
+  "split": "test",
+  "kind": "gate",
+  "data": {
+    "gate": "payment"
+  }
+}

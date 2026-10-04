@@ -1,0 +1,14 @@
+{
+  "cli_version": "0.16.9",
+  "node_version": "25.4.0",
+  "observed_worker_model": "GLM-5.3",
+  "cli_sha256": "fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f",
+  "plugin_versions": {
+    "browser-use-plugin": "0.5.1",
+    "zcode-cua-plugin": "0.6.3",
+    "node-repl-host": "0.6.0"
+  },
+  "playwright_core": "1.59.1",
+  "browser_session": "fresh headless Chrome; no existing logged-in session",
+  "desktop_ready": false
+}

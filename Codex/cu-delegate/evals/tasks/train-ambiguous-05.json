@@ -1,0 +1,20 @@
+{
+  "id": "train-ambiguous-05",
+  "split": "train",
+  "kind": "ambiguous",
+  "data": {
+    "rows": [
+      [
+        "PK-110",
+        "pending",
+        8
+      ],
+      [
+        "PK-110",
+        "dispatched",
+        19
+      ]
+    ],
+    "target": "PK-110"
+  }
+}

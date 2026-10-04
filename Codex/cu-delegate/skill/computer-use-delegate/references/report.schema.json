@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["run_id", "status", "summary", "route", "criteria", "outputs", "blocker", "actions_used", "final_screenshot", "next_attempt_hint"],
+  "properties": {
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["success", "partial", "blocked", "infeasible", "failed"]},
+    "summary": {"type": "string", "maxLength": 2000},
+    "route": {"enum": ["browser", "desktop"]},
+    "criteria": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "met", "evidence"], "properties": {"id": {"type": "string"}, "met": {"type": "boolean"}, "evidence": {"type": "string", "maxLength": 4096}}}},
+    "outputs": {"type": "object", "required": ["files", "values", "final_url"], "properties": {"files": {"type": "array", "items": {"type": "string"}}, "values": {"type": "object"}, "final_url": {"type": ["string", "null"]}}},
+    "blocker": {"type": ["object", "null"]},
+    "actions_used": {"type": "integer", "minimum": 0},
+    "final_screenshot": {"type": ["string", "null"]},
+    "next_attempt_hint": {"type": "string"}
+  }
+}

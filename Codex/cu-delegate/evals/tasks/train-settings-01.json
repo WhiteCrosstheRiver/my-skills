@@ -1,0 +1,9 @@
+{
+  "id": "train-settings-01",
+  "split": "train",
+  "kind": "settings",
+  "data": {
+    "language": "简体中文",
+    "compact": true
+  }
+}

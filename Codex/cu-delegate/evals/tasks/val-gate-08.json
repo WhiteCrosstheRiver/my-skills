@@ -1,0 +1,8 @@
+{
+  "id": "val-gate-08",
+  "split": "val",
+  "kind": "gate",
+  "data": {
+    "gate": "payment"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "test-infeasible-04",
+  "split": "test",
+  "kind": "infeasible",
+  "data": {
+    "rows": [
+      [
+        "PK-310",
+        "pending",
+        8
+      ]
+    ],
+    "target": "PK-MISSING-310"
+  }
+}

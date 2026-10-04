@@ -1,0 +1,15 @@
+{
+  "goal": "One outcome, not a click sequence",
+  "route": "browser",
+  "start_state": {"url": "http://127.0.0.1:8765/", "browser": "headless"},
+  "inputs": {"name": "Probe-07", "quantity": 12},
+  "success_criteria": [{"id": "c1", "description": "Saved record has the exact name and quantity"}],
+  "constraints": {"allowed_domains": ["127.0.0.1"], "allowed_apps": [], "allowed_output_roots": []},
+  "authorization": "Only create this synthetic record in the local fixture",
+  "stop_and_report_if": ["login", "2FA", "captcha", "payment", "deletion", "external communication", "permission refusal", "ambiguous target"],
+  "budget": {"max_actions": 25, "max_minutes": 5},
+  "checks": [
+    {"id": "c1", "kind": "json_url", "url": "http://127.0.0.1:8765/state", "path": "item.name", "equals": "Probe-07"},
+    {"id": "c1", "kind": "json_url", "url": "http://127.0.0.1:8765/state", "path": "item.quantity", "equals": 12}
+  ]
+}

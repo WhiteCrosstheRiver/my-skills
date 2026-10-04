@@ -1,0 +1,8 @@
+{
+  "id": "test-gate-07",
+  "split": "test",
+  "kind": "gate",
+  "data": {
+    "gate": "captcha"
+  }
+}

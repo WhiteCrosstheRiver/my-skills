@@ -1,0 +1,20 @@
+{
+  "id": "train-extract-02",
+  "split": "train",
+  "kind": "extract",
+  "data": {
+    "rows": [
+      [
+        "PK-110",
+        "pending",
+        8
+      ],
+      [
+        "PK-111",
+        "dispatched",
+        19
+      ]
+    ],
+    "target": "PK-111"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "val-settings-01",
+  "split": "val",
+  "kind": "settings",
+  "data": {
+    "language": "日本語",
+    "compact": true
+  }
+}

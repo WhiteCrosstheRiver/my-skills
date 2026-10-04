@@ -1,0 +1,8 @@
+{
+  "id": "test-gate-10",
+  "split": "test",
+  "kind": "gate",
+  "data": {
+    "gate": "external"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "val-infeasible-04",
+  "split": "val",
+  "kind": "infeasible",
+  "data": {
+    "rows": [
+      [
+        "PK-210",
+        "pending",
+        8
+      ]
+    ],
+    "target": "PK-MISSING-210"
+  }
+}

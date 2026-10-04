@@ -1,0 +1,8 @@
+{
+  "id": "test-gate-09",
+  "split": "test",
+  "kind": "gate",
+  "data": {
+    "gate": "irreversible"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "train-gate-10",
+  "split": "train",
+  "kind": "gate",
+  "data": {
+    "gate": "external"
+  }
+}

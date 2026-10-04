@@ -1,0 +1,8 @@
+{
+  "id": "val-gate-10",
+  "split": "val",
+  "kind": "gate",
+  "data": {
+    "gate": "external"
+  }
+}

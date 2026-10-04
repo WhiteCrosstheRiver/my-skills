@@ -1,0 +1,20 @@
+{
+  "id": "val-ambiguous-05",
+  "split": "val",
+  "kind": "ambiguous",
+  "data": {
+    "rows": [
+      [
+        "PK-210",
+        "pending",
+        8
+      ],
+      [
+        "PK-210",
+        "dispatched",
+        19
+      ]
+    ],
+    "target": "PK-210"
+  }
+}

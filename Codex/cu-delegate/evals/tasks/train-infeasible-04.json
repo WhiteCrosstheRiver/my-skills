@@ -1,0 +1,15 @@
+{
+  "id": "train-infeasible-04",
+  "split": "train",
+  "kind": "infeasible",
+  "data": {
+    "rows": [
+      [
+        "PK-110",
+        "pending",
+        8
+      ]
+    ],
+    "target": "PK-MISSING-110"
+  }
+}
