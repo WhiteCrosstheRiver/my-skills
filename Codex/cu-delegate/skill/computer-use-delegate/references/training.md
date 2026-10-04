@@ -11,9 +11,12 @@ bench must execute Codex on user-style prompts and grade its resulting traces. L
 needs real Codex routing/brief writing and real GLM; L4 is authorized field use.
 Never mislabel helper unit tests as L2 model evaluation or gold-brief L1 as L3.
 
-Run `python evals/run.py --split train --repeats 1`, then validation three times.
-Use `--split test --repeats 3` only for a release candidate. The fixture server is
-localhost-only and each task gets a fresh reset plus a fresh headless browser process.
+The installed skill includes `python scripts/test_delegate.py` for deterministic
+protocol regressions; these do not exercise a model or establish a release score.
+An `evals/run.py` source harness is not included in this installed directory. If
+that source checkout is available, verify its commands and frozen splits before
+using it for three-repeat validation/held-out release evaluation. The fixture server
+must be localhost-only and each task gets a fresh reset and headless browser process.
 It isolates test data, not the host OS or worker network: native desktop training
 requires a separate resettable VM/container, not the user's live applications.
 

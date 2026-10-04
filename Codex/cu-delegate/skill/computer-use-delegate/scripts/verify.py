@@ -2,10 +2,12 @@
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
 from runtime import dump, load
+from protocol import validate_brief, validate_report
 
 
 def dig(value, path):
@@ -25,6 +27,8 @@ def json_equal(actual, expected):
 
 
 def verify(brief, report):
+    validate_brief(brief)
+    validate_report(report, brief)
     criteria = brief['success_criteria']
     claims = {c['id']: c for c in report.get('criteria', [])}
     results = []
@@ -59,14 +63,31 @@ def verify(brief, report):
     covered = {r['id'] for r in results}
     all_checked = all(c['id'] in covered for c in criteria)
     machine_pass = bool(results) and all_checked and all(r['passed'] for r in results)
-    claimed = report.get('status') == 'success' and all(claims.get(c['id'], {}).get('met') is True for c in criteria)
-    return {'verified_success': claimed and machine_pass,
-            'verification_level': 'independent' if all_checked and results else 'incomplete',
-            'false_success_claim': claimed and bool(results) and not machine_pass,
+    claimed = report.get('status') == 'success' and bool(criteria) and all(
+        claims.get(c['id'], {}).get('met') is True and
+        isinstance(claims[c['id']].get('evidence'), str) and claims[c['id']]['evidence'].strip()
+        for c in criteria)
+    failed_checks = any(not r['passed'] and 'error' not in r for r in results)
+    check_errors = any('error' in r for r in results)
+    observed_allowed = brief.get('intent') == 'inspect' and brief.get('verification') == 'observed'
+    verified = bool(claimed and machine_pass)
+    observed = bool(claimed and observed_allowed and not failed_checks and not check_errors)
+    if verified: outcome = 'independently_verified'
+    elif claimed and failed_checks: outcome = 'failed_checks'
+    elif claimed and check_errors: outcome = 'verification_error'
+    elif observed: outcome = 'worker_observed'
+    elif claimed: outcome = 'verification_incomplete'
+    else: outcome = report.get('status', 'failed')
+    return {'verified_success': verified, 'accepted': verified or observed, 'outcome': outcome,
+            'verification_level': 'independent' if verified else 'worker_observed' if observed else 'incomplete',
+            'false_success_claim': bool(claimed and failed_checks),
+            'unchecked_criteria': [c['id'] for c in criteria if c['id'] not in covered],
+            'check_errors': [r['id'] for r in results if 'error' in r],
             'checks': results}
 
 
 def main():
+    if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8')
     p = argparse.ArgumentParser()
     p.add_argument('--brief', required=True); p.add_argument('--report', required=True)
     p.add_argument('--output')
@@ -74,7 +95,7 @@ def main():
     result = verify(load(a.brief), load(a.report))
     if a.output: dump(a.output, result)
     print(json.dumps(result, ensure_ascii=False))
-    return 0 if result['verified_success'] else 2
+    return 0 if result['accepted'] else 2
 
 
 if __name__ == '__main__':

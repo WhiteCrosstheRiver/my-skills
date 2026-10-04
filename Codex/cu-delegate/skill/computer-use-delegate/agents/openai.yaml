@@ -1,4 +1,4 @@
 interface:
   display_name: "ZCode GLM Computer Use"
-  short_description: "Delegate local GUI work with verified GLM reports"
-  default_prompt: "Use $computer-use-delegate to delegate this GUI task to local ZCode GLM and verify the result."
+  short_description: "Coordinate GUI research with checked GLM reports"
+  default_prompt: "Use $computer-use-delegate to choose a supported GUI route, delegate a bounded task to ZCode GLM, and check its evidence."

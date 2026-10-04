@@ -7,61 +7,111 @@ import subprocess
 import time
 import uuid
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from runtime import discover, chrome_path, private_runtime, make_personal, dump, load, parse_object, parse_report, prepare_launcher
 from verify import verify
 
 SKILL = Path(__file__).resolve().parent.parent
-STATUSES = {'success', 'partial', 'blocked', 'infeasible', 'failed'}
+from protocol import validate_brief, validate_report
 
 
-def validate_brief(b):
-    for key in ['goal', 'route', 'start_state', 'success_criteria', 'constraints', 'authorization', 'stop_and_report_if', 'budget']:
-        if key not in b: raise ValueError('Missing brief field: ' + key)
-    if b['route'] not in {'browser', 'desktop'}: raise ValueError('Route must require UI')
-    ids = [c['id'] for c in b['success_criteria']]
-    if not ids or len(ids) != len(set(ids)): raise ValueError('Nonempty unique criteria required')
-    if not b['constraints'].get('allowed_domains') and not b['constraints'].get('allowed_apps'):
-        raise ValueError('Explicit allowed targets required')
-    budget = b['budget']
-    if not 1 <= budget['max_actions'] <= 100 or not 0 < budget['max_minutes'] <= 30:
-        raise ValueError('Invalid budget')
-    if b['route'] == 'browser':
-        from urllib.parse import urlparse
-        url = b['start_state'].get('url', '')
-        if urlparse(url).hostname not in b['constraints']['allowed_domains']:
-            raise ValueError('Start URL outside allowed domains')
-        if b['start_state'].get('browser') != 'headless':
-            raise ValueError('Standalone worker supports a fresh headless browser only; no silent session substitution')
-    if len(json.dumps(b, ensure_ascii=False)) > 16000: raise ValueError('Brief oversized')
-    if any(c['id'] not in ids for c in b.get('checks', [])): raise ValueError('Unknown checker criterion')
+def worker_prompt(b):
+    operator = Path.home() / '.zcode/skills/gui-operator/SKILL.md'
+    worker_brief = {k: v for k, v in b.items() if k != 'checks'}
+    inspection = ('This is read-only inspection: navigation and opening/closing inspection dialogs are allowed; '
+                  'do not change/save document data or submit mutating forms. ') if b.get('intent') == 'inspect' else ''
+    desktop = ('Use this existing ZCode Desktop main session and its attached native Computer Use host. '
+               'Do not start a CLI, subagent or workflow. Make fresh observations for this run_id; '
+               'do not copy an earlier conversation answer. Stop after this brief. ') if b['route'] == 'desktop' else ''
+    return ('Read and follow gui-operator skill at ' + str(operator) +
+            '. Execute this brief as the main agent. Return exactly one JSON report. ' + inspection + desktop +
+            'Independent checker definitions are withheld. No shell, hidden state, subagents, permission questions or workflow tools.\n' +
+            json.dumps(worker_brief, ensure_ascii=False))
 
 
-def validate_report(r, b):
-    if r.get('run_id') != b['run_id'] or r.get('route') != b['route']:
-        raise ValueError('Wrong run/route in worker report')
-    if r.get('status') not in STATUSES: raise ValueError('Unknown status')
-    if not isinstance(r.get('summary'), str) or len(r['summary']) > 2000: raise ValueError('Invalid summary')
-    expected = {c['id'] for c in b['success_criteria']}
-    rows = r.get('criteria', [])
-    if {c.get('id') for c in rows} != expected or len(rows) != len(expected): raise ValueError('Criteria mismatch')
-    for row in rows:
-        if type(row.get('met')) is not bool or not isinstance(row.get('evidence'), str): raise ValueError('Invalid criterion evidence')
-        if row['met'] and not row['evidence'].strip(): raise ValueError('Claim without evidence')
-        if len(row['evidence']) > 4096: raise ValueError('Oversized evidence')
-    if type(r.get('actions_used')) is not int or not 0 <= r['actions_used'] <= b['budget']['max_actions']:
-        raise ValueError('Invalid action count')
-    if r['status'] == 'success' and not all(c['met'] for c in rows): raise ValueError('Success with unmet criteria')
-    if r['status'] == 'blocked' and not isinstance(r.get('blocker'), dict): raise ValueError('Missing blocker')
-    out = r.get('outputs')
-    if not isinstance(out, dict) or not isinstance(out.get('files'), list) or not isinstance(out.get('values'), dict):
-        raise ValueError('Invalid outputs')
-    roots = [Path(x).resolve() for x in b['constraints'].get('allowed_output_roots', [])]
-    for file in out['files'] + ([r['final_screenshot']] if r.get('final_screenshot') else []):
-        path = Path(file)
-        if not path.is_absolute() or not any(path.resolve().is_relative_to(root) for root in roots):
-            raise ValueError('Output file outside allowed roots')
-    return r
+def prepare_handoff(brief, runs):
+    """Prepare a main-session brief; no GUI action, credential access or model call."""
+    validate_brief(brief)
+    if brief['route'] != 'desktop': raise ValueError('Handoff is for a supported native Desktop main session')
+    started = time.monotonic()
+    b = {**brief, 'run_id': uuid.uuid4().hex}
+    run_dir = Path(runs).resolve() / b['run_id']
+    run_dir.mkdir(parents=True, exist_ok=False)
+    dump(run_dir / 'brief.json', b)
+    (run_dir / 'handoff-prompt.txt').write_text(worker_prompt(b), encoding='utf-8')
+    dump(run_dir / 'metadata.json', {'run_id': b['run_id'], 'execution': 'not_started',
+                                    'transport': 'existing_zcode_desktop_session',
+                                    'prepared_at_utc': datetime.now(timezone.utc).isoformat(),
+                                    'timing_scope': 'handoff_preparation_only',
+                                    'model_calls': 0, 'handoff': True, 'usage': None})
+    return {'run_dir': str(run_dir), 'status': 'handoff_prepared', 'accepted': False,
+            'verified_success': False, 'execution': 'not_started', 'outcome': 'handoff_prepared',
+            'elapsed_seconds': round(time.monotonic() - started, 6),
+            'timing_scope': 'handoff_preparation_only',
+            'prompt_path': str(run_dir / 'handoff-prompt.txt'),
+            'next_step': 'Deliver once to the existing authorized ZCode Desktop main session, record mark-sent, then import its matching report. Never launch a standalone desktop CLI.'}
+
+
+def mark_handoff_sent(run_dir, target_session):
+    """Record a completed authorized delivery; this function does not send input."""
+    run_dir = Path(run_dir).resolve()
+    meta = load(run_dir / 'metadata.json')
+    if not meta.get('handoff') or meta.get('execution') != 'not_started':
+        raise ValueError('Handoff was already sent/imported or is not prepared; do not send again')
+    if not isinstance(target_session, str) or not target_session.strip() or len(target_session) > 500:
+        raise ValueError('Exact existing recipient/session label required')
+    dump(run_dir / 'metadata.json', {**meta, 'execution': 'awaiting_report',
+                                    'sent_at_utc': datetime.now(timezone.utc).isoformat(),
+                                    'target_session': target_session})
+    return {'run_dir': str(run_dir), 'run_id': meta['run_id'], 'execution': 'awaiting_report',
+            'accepted': False, 'verified_success': False}
+
+
+def accept_handoff(run_dir, report_path):
+    run_dir = Path(run_dir).resolve()
+    meta = load(run_dir / 'metadata.json')
+    if not meta.get('handoff'): raise ValueError('Run is not a prepared handoff')
+    if meta.get('execution') != 'awaiting_report':
+        raise ValueError('Require one recorded delivery before import; completed reports cannot be replayed')
+    b = load(run_dir / 'brief.json'); validate_brief(b)
+    if Path(report_path).stat().st_size > 65536: raise ValueError('Report exceeded 64 KiB')
+    report = validate_report(load(report_path), b)
+    verification = verify(b, report)
+    dump(run_dir / 'report.json', report); dump(run_dir / 'verification.json', verification)
+    # An imported report establishes no automatic proof of its producer or token usage.
+    dump(run_dir / 'metadata.json', {**meta, 'execution': 'report_imported',
+                                    'imported_at_utc': datetime.now(timezone.utc).isoformat(),
+                                    'report_source': 'external_unattested'})
+    return {'run_dir': str(run_dir), 'status': report['status'], 'summary': report['summary'],
+            'accepted': verification['accepted'], 'verified_success': verification['verified_success'],
+            'outcome': verification['outcome'], 'usage': None}
+
+
+def doctor():
+    info = discover()
+    packages = Path(info['packages'])
+    browser = chrome_path()
+    operator = Path.home() / '.zcode/skills/gui-operator/SKILL.md'
+    browser_plugin = (packages / 'browser-use-plugin/package.json').is_file()
+    desktop_plugin = (packages / 'zcode-cua-plugin/package.json').is_file()
+    root = Path(os.environ.get('CODEX_HOME', str(Path.home() / '.codex'))) / 'zcode-cu-runtime'
+    dependency = root / 'launcher/node_modules/playwright-core/package.json'
+    pinned = load(packages / 'browser-use-plugin/package.json')['devDependencies']['playwright-core'] if browser_plugin else None
+    dependency_ready = dependency.is_file() and load(dependency).get('version') == pinned
+    return {**info, 'version': None, 'version_source': 'not_probed_no_cli_process', 'browser_executable': browser,
+            'desktop_headless_ready': False,
+            'routes': {
+                'browser': {'prerequisites_present': bool(browser and browser_plugin and operator.is_file() and dependency_ready),
+                            'plugin_present': browser_plugin, 'operator_present': operator.is_file(),
+                            'pinned_dependency_present': dependency_ready, 'live_test_required': True},
+                'desktop': {'plugin_present': desktop_plugin, 'transport': 'existing_zcode_desktop_session',
+                            'reason': 'Desktop briefs use an existing authorized Desktop main session; standalone desktop CLI is disabled.',
+                            'host_environment_presence': {key: bool(os.environ.get(key)) for key in
+                                ['ZCODE_CUA_NODE_REPL_HOST', 'ZCODE_CUA_PERMISSION_BROKER_SOCKET', 'ZCODE_CUA_PRODUCT_HELPER']},
+                            'environment_scope': 'current Python parent only; not a test of the Desktop session',
+                            'handoff_supported': operator.is_file(), 'live_test_required': True}},
+            'credential_check': 'not_performed', 'model_calls': 0}
 
 
 def failed_report(b, detail, status='blocked'):
@@ -97,6 +147,8 @@ def observed_models(run_dir):
 
 def run(brief, runs, model=None):
     validate_brief(brief)
+    if brief['route'] == 'desktop':
+        return prepare_handoff(brief, runs)
     b = dict(brief)
     b['run_id'] = uuid.uuid4().hex
     run_dir = Path(runs).resolve() / b['run_id']
@@ -113,10 +165,6 @@ def run(brief, runs, model=None):
     try:
         fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.write(fd, json.dumps({'pid': os.getpid(), 'run_id': b['run_id']}).encode())
-        if b['route'] == 'desktop':
-            # Desktop surface needs runtime-preference + permission-broker handshake.
-            # A plain --prompt process cannot impersonate its Desktop host.
-            raise RuntimeError('Native desktop control needs a supported ZCode Desktop host/broker; standalone CLI readiness is unverified')
         info = discover()
         env, provider_id, selected = private_runtime(info, model)
         launcher = prepare_launcher(info, env)
@@ -129,11 +177,7 @@ def run(brief, runs, model=None):
         # Load operator by absolute path; also installed for normal ZCode discovery.
         operator = Path.home() / '.zcode/skills/gui-operator/SKILL.md'
         if not operator.is_file(): raise RuntimeError('Install gui-operator before invoking the worker')
-        worker_brief = {k: v for k, v in b.items() if k != 'checks'}
-        prompt = ('Read and follow gui-operator skill at ' + str(operator) +
-                  '. Execute this brief as the main agent. Return exactly one JSON report. '
-                  'Independent checker definitions are withheld. No shell, hidden state, subagents, permission questions or workflow tools.\n' +
-                  json.dumps(worker_brief, ensure_ascii=False))
+        prompt = worker_prompt(b)
         command = [info['node'], launcher, '--cwd', str(run_dir), '--browser-use', 'headless',
                    '--browser-executable', browser_exe, '--mode', 'yolo', '--disallowed-tools',
                    'Bash,Write,Edit,Agent,CreateWorkflow,AskUserQuestion,WebFetch,WebSearch',
@@ -179,7 +223,8 @@ def run(brief, runs, model=None):
             'dollar_cost': None, 'quota_used': None, 'error': error}
     dump(run_dir / 'metadata.json', meta)
     return {'run_dir': str(run_dir), 'status': report['status'], 'summary': report['summary'],
-            'verified_success': verification['verified_success'], 'usage': usage, 'elapsed_seconds': meta['elapsed_seconds']}
+            'verified_success': verification['verified_success'], 'accepted': verification['accepted'],
+            'outcome': verification['outcome'], 'usage': usage, 'elapsed_seconds': meta['elapsed_seconds']}
 
 
 def main():
@@ -187,16 +232,27 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--brief'); p.add_argument('--runs', default='zcode-cu-runs')
     p.add_argument('--model'); p.add_argument('--doctor', action='store_true')
+    p.add_argument('--prepare-handoff', action='store_true')
+    p.add_argument('--mark-sent', action='store_true'); p.add_argument('--target-session')
+    p.add_argument('--accept-report'); p.add_argument('--run-dir')
     a = p.parse_args()
     if a.doctor:
-        info = discover()
-        version = subprocess.run([info['node'], info['entrypoint'], '--version'], capture_output=True, text=True, timeout=15)
-        print(json.dumps({**info, 'version': version.stdout.strip(), 'browser_executable': chrome_path(),
-                          'desktop_headless_ready': False}, ensure_ascii=False, indent=2)); return 0
+        print(json.dumps(doctor(), ensure_ascii=False, indent=2)); return 0
+    if a.mark_sent:
+        if not a.run_dir or not a.target_session or a.brief or a.accept_report or a.prepare_handoff:
+            p.error('--mark-sent requires only --run-dir and --target-session')
+        print(json.dumps(mark_handoff_sent(a.run_dir, a.target_session), ensure_ascii=False)); return 3
+    if a.accept_report:
+        if not a.run_dir or a.prepare_handoff or a.brief: p.error('--accept-report requires only --run-dir')
+        result = accept_handoff(a.run_dir, a.accept_report)
+        print(json.dumps(result, ensure_ascii=False)); return 0 if result['accepted'] else 2
     if not a.brief: p.error('--brief is required')
+    if a.prepare_handoff:
+        result = prepare_handoff(load(a.brief), a.runs)
+        print(json.dumps(result, ensure_ascii=False)); return 3
     result = run(load(a.brief), a.runs, a.model)
     print(json.dumps(result, ensure_ascii=False))
-    return 0 if result['verified_success'] else 2
+    return 0 if result['accepted'] else 3 if result.get('execution') == 'not_started' else 2
 
 
 if __name__ == '__main__':

@@ -1,5 +1,24 @@
 # Training changes
 
+## v0.2 experimental, 2026-10-04
+
+- Desktop dispatch now prepares an existing ZCode Desktop main-session handoff.
+  Never launch an independent desktop CLI or rerun desktop_retry.py. The doctor
+  reads prerequisites without launching CLI --version.
+- Separate preparation, observed delivery and report import. Fresh run IDs,
+  single delivery receipts and one-time imports reject old/duplicate reports.
+  Pending handoffs exit 3; short preparation/output-fetch time is not worker time.
+- Bring the currently installed inspection/type/acceptance protocol and native
+  operator into the source package. Observation acceptance stays distinct from
+  independent verification; mutation still requires full independent checks.
+- One real authorized Materials Studio read-only handoff completed through the
+  existing Desktop conversation. Returned matching JSON was accepted as
+  worker_observed; zero target-app input actions and no target-app screenshots.
+  This is one canary, not a full desktop or cost benchmark.
+- Preserve v0.1 evaluation files/manifests as historical evidence at fa0991d.
+  Publish a v0.2 delivery manifest and an aggregate desktop canary scorecard.
+  Private live-app reports, chat snapshots, credentials and run directories stay local.
+
 ## v0.1 candidate, 2026-10-04
 
 - Hypothesis: native headless Browser Use plus a compact operator protocol can

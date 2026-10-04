@@ -1,6 +1,8 @@
 {
   "goal": "One outcome, not a click sequence",
   "route": "browser",
+  "intent": "mutate",
+  "verification": "independent",
   "start_state": {"url": "http://127.0.0.1:8765/", "browser": "headless"},
   "inputs": {"name": "Probe-07", "quantity": 12},
   "success_criteria": [{"id": "c1", "description": "Saved record has the exact name and quantity"}],

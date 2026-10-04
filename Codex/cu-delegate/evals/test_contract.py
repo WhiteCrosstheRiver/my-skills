@@ -37,6 +37,7 @@ class ContractTests(unittest.TestCase):
 
     def test_missing_criterion_checker_not_success(self):
         self.brief['success_criteria'].append({'id': 'c2', 'description': 'Another result'})
+        self.report['criteria'].append({'id': 'c2', 'met': True, 'evidence': 'Another observed result'})
         self.state.write_text('{"saved":true}', encoding='utf-8')
         self.assertFalse(verify(self.brief, self.report)['verified_success'])
 
@@ -64,10 +65,12 @@ class ContractTests(unittest.TestCase):
         self.brief['checks'] = []
         self.assertEqual(verify(self.brief, self.report)['verification_level'], 'incomplete')
 
-    def test_desktop_fails_closed_without_model_call(self):
+    def test_desktop_prepares_pending_handoff_without_model_call(self):
         self.brief['route'] = 'desktop'; self.brief['constraints']['allowed_apps'] = ['Test Fixture']
-        result = run(self.brief, self.root / 'runs')
-        self.assertEqual(result['status'], 'blocked'); self.assertIsNone(result['usage'])
+        with patch('delegate.discover', side_effect=AssertionError('No model/runtime setup')):
+            result = run(self.brief, self.root / 'runs')
+        self.assertEqual(result['status'], 'handoff_prepared')
+        self.assertEqual(result['execution'], 'not_started'); self.assertFalse(result['accepted'])
 
     def test_worker_cannot_supply_checker(self):
         self.report['checks'] = [{'id': 'c1', 'kind': 'json_file', 'file': 'arbitrary', 'equals': True}]

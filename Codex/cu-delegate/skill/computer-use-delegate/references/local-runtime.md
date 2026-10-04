@@ -45,19 +45,43 @@
   It does not install a browser: existing Chrome is passed explicitly.
 - A standalone `--surface desktop --prompt` native-CUA probe timed out awaiting
   host cooperation. No supported Desktop broker was supplied. Desktop delegation
-  currently fails closed **before a model call**; it is not tested or certified.
+  originally failed closed **before a model call**. The corrected wrapper now
+  prepares an existing-session handoff without any independent desktop process.
   `gui-operator` is installed in ZCode and can execute a brief as the actual
   ZCode Desktop main agent when that supported runtime is present. Do not forge
-  permission tokens, use development mode or control the app UI to work around it.
+  permission tokens, use development mode or automate approval UI to bypass it.
+- A later user-supplied screenshot confirms that the actual ZCode Desktop main
+  session can read Materials Studio after restart. A fresh isolated native CLI
+  `--surface desktop` retry completed in about 61 seconds but returned
+  `Computer Use is unavailable for this node_repl session`, with zero input
+  actions. Desktop-client readiness does not automatically attach its broker to
+  this standalone worker. The remaining issue is session transport, not a request
+  for the user to repeat Desktop authorization.
 - Docker is installed but its Linux daemon was not running. Browser tests use
   localhost Python fixtures and fresh headless Chrome. This is test-data isolation,
   not an OS/network sandbox. Native desktop evaluation remains pending a resettable
   VM/container and a supported worker-host connection.
 
-Source and evaluation scripts live in the workspace `cu-delegate` folder. Run
-`scripts/delegate.py --doctor` to refresh paths/version. After changes run the
-source installer with `--update`, then open a new Codex chat if its skill catalog
-has not refreshed. Existing installed plugins and model settings stay unchanged.
+Desktop transport correction, 2026-10-04: use the already authorized ZCode Desktop
+main session. Its native host can read Materials Studio; the independent CLI
+lacks the live CUA host/broker/helper environment. Do not infer Desktop settings
+from `unavailable for this node_repl session` in that independent process.
+The old desktop_retry.py creates a new UUID directory each invocation and reads
+that directory's stdout, not a cached report. Three recorded runs took 61.319,
+90.154 and 61.475 seconds. A near-zero process-output fetch can simply retrieve
+a completed invocation; it is not evidence of near-zero worker execution.
+Never run this probe again as the Desktop handoff path.
+
+The installed skill lives in `~/.codex/skills/computer-use-delegate`; a source
+checkout/installer is not required for direct updates and must not be assumed to
+exist. Run `scripts/delegate.py --doctor` to refresh paths/version and prerequisites
+without loading credentials, invoking a model or launching a CLI process. Desktop
+handoffs are prepared, delivered once to the existing session, marked awaiting a
+report, and imported only with the new task ID. GUI delivery requires an authorized
+recipient and the native Windows skill; the helper itself sends no GUI input;
+see [coordination.md](coordination.md). Open a new Codex chat if the skill catalog's
+description has not refreshed. Existing plugins and global model settings stay
+unchanged.
 
 Upstream context: [ZCode CLI issue 907](https://github.com/zai-org/feedback/issues/907)
 describes the headless model-selection gap. Prefer measured local behavior over

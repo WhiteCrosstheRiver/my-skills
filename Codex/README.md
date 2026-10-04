@@ -1,7 +1,7 @@
 # Codex skills
 
 - [cost-aware-delegation](cost-aware-delegation/SKILL.md)：按任务难度和可验收性选择子智能体。
-- [computer-use-delegate](cu-delegate/skill/computer-use-delegate/SKILL.md)：Codex 写任务书并验收，本机 ZCode GLM 负责网页观察与操作。当前为 v0.1 experimental；原生桌面自动委派尚未联通。
+- [computer-use-delegate](cu-delegate/skill/computer-use-delegate/SKILL.md)：Codex 写任务书并验收，本机 ZCode GLM 负责观察与操作。当前为 v0.2 experimental；桌面任务交给已有 ZCode 主会话，已完成一次 Materials Studio 只读交接闭环。
 
 ## 安装 computer-use-delegate
 
@@ -19,7 +19,7 @@ python ./Codex/cu-delegate/scripts/install.py
 在新的 Codex 对话中使用 `$computer-use-delegate`。只安装 Codex 端入口不足以启动
 ZCode worker；还需 ZCode 端的 gui-operator 及本机运行环境。
 
-[完整说明](cu-delegate/README.md) · [训练验收记录](cu-delegate/scorecards/v0.1.md)
+[完整说明](cu-delegate/README.md) · [v0.2 桌面交接验收](cu-delegate/scorecards/v0.2.md) · [v0.1 浏览器验收](cu-delegate/scorecards/v0.1.md)
 
 完整训练包保留原有路径，便于复跑安装、契约测试和 L1 原型测试。版本清单按文件
 原始字节计算 SHA-256；包内 `.gitattributes` 关闭换行归一化，保持检查点哈希。
