@@ -9,21 +9,23 @@ learner:
 ---
 ```bib
 S1: [Cannell, George Green: Mathematician and Physicist 1793–1841](https://books.google.ba/books?id=x2Y2eb9IzwwC) — tier A — 1828 论文史实
-S2: [MIT OCW 18.303 Linear PDE](https://ocw.mit.edu/courses/18-303-linear-partial-differential-equations-fall-2014/) — tier A — G=L⁻¹、LG=δ、边界条件
-S3: [Strang, Delta functions and distributions](https://math.mit.edu/~gs/) — tier A — δ 与脉冲响应
-S4: [Datta, Nanoscale device modeling: the Green's function method (2000)](https://courses.ece.ucsb.edu/ECE194/194A_S13Banerjee/References/Datta_NEGF.pdf) — tier A — NEGF 基础
-S5: [Camsari et al., The NEGF Method (arXiv:2008.01275)](https://arxiv.org/abs/2008.01275) — tier A 预印本 — NEGF 教学综述
-S6: [QuantumATK NEGF Device 官方文档](https://docs.quantumatk.com/manual/NEGFDevice.html) — tier D — 工业实现
-S7: [Zhang et al., rNEGF, PRB 110, 155430 (2024)](https://link.aps.org/doi/10.1103/PhysRevB.110.155430) — tier A — 大规模 NEGF
-S8: [Jin et al., New Green's function for stress field (2009)](https://www.sciencedirect.com) — tier A — 本征源应力 G
-S9: [Pan & Chen, Green's Functions (Springer)](https://link.springer.com) — tier A — Kelvin/Mindlin 专著
+S2: [MIT OCW 18.303 Linear PDE](https://ocw.mit.edu/courses/18-303-linear-partial-differential-equations-fall-2014/) — tier B — G=L⁻¹、LG=δ、边界条件
+S3: [Strang, Delta functions and distributions (MIT)](https://math.mit.edu/~gs/) — tier A 论文 — δ 与脉冲响应
+S4: [Datta, Nanoscale device modeling: the Green's function method (JPCM 2000)](https://courses.ece.ucsb.edu/ECE194/194A_S13Banerjee/References/Datta_NEGF.pdf) — tier A — NEGF 基础
+S5: [Camsari et al., The NEGF Method (arXiv:2008.01275, 预印本)](https://arxiv.org/abs/2008.01275) — tier A 预印本 — NEGF 教学综述
+S6: [QuantumATK NEGF Device 官方文档(Synopsys)](https://docs.quantumatk.com/manual/NEGFDevice.html) — tier D 官方文档 — 工业实现
+S7: [Zhang et al., rNEGF, PRB 110, 155430 (2024)](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.110.155430) — tier A — 大规模 NEGF,维度至 4×10⁵
+S8: [Jin, Keer, Wang, IJSS 46(21):3788 (2009), DOI 10.1016/j.ijsolstr.2009.07.015](https://www.sciencedirect.com/science/article/pii/S0020768309002698) — tier A — 本征源应力 G
+S9: [Pan & Chen, Static Green's Functions in Anisotropic Media (Cambridge UP 2015)](https://www.cambridge.org/9781107034801) — tier A 专著 — Kelvin/Mindlin
 S10: [Physics SE: greens-functions 高赞问题](https://physics.stackexchange.com/questions/tagged/greens-functions?tab=Votes) — tier E — 误区与卡点
 S11: [Strassler, Virtual particles: what are they?](https://profmattstrassler.com/articles-and-posts/virtual-particles-what-are-they/) — tier C — 传播子直觉
-S12: [Stress mapping in strain-engineered Si pMOSFET (AIP 2012)](https://pubs.aip.org) — tier D — 应力工程
+S12: [Krzeminski et al., J. Vac. Sci. Technol. B 30, 022203 (2012), DOI 10.1116/1.3683079](https://doi.org/10.1116/1.3683079) — tier D — 应力仿真 vs 实验
 S13: [ASME: Introduction to FEM/BEM, BEM fundamentals](https://asmedigitalcollection.asme.org) — tier D — 基本解方法
-S14: [Laplace Neural Operator (arXiv 2023)](https://arxiv.org) — 预印本 — 神经算子
-S15: [ML Green's functions of strongly correlated systems (IOP)](https://iopscience.iop.org) — 预印本 — ML 自能
+S14: [Cao et al., Laplace Neural Operator, Nat. Mach. Intell. 6:631 (2024), DOI 10.1038/s42256-024-00844-4](https://www.nature.com/articles/s42256-024-00844-4) — tier A — Laplace 域神经算子
+S15: [ML Green's Functions of Strongly Correlated Hubbard Models, J. Phys.: Condens. Matter (2025), DOI 10.1088/1361-648X/ae649b](https://iopscience.iop.org/article/10.1088/1361-648X/ae649b) — tier A — KRR 学自能
 S17: [MIT OCW 18.03 Differential Equations](https://ocw.mit.edu/courses/18-03-differential-equations-spring-2010/) — tier B — 脉冲响应与卷积
+S19: [Intel 官方背景材料:Strained Silicon](https://www.intel.com/pressroom/kits/advancedtech/doodle/ref_strain/strain.htm) — tier D 官方 — 90nm 应变硅量产
+S20: [Green's Neural Operator with Neumann BC (OpenReview, 预印本)](https://openreview.net) — tier E 预印本 — 另一条神经算子线
 ```
 
 ## P01 · 先别看任何方程:敲一下,会发生什么?
@@ -62,6 +64,28 @@ $$A=\begin{pmatrix}3 & 1\\ 1 & 2\end{pmatrix},\qquad x=\begin{pmatrix}x_1\\ x_2\
 
 $b$ 是外力,$x$ 是位移。$A$ 描述弹簧网络:对角线是自己身上的弹簧刚度,非对角线是耦合。
 
+```visual
+<svg viewBox="0 0 640 130" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <line x1="40" y1="60" x2="120" y2="60" stroke="var(--ink3)" stroke-width="2"/>
+  <rect x="120" y="40" width="46" height="40" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+  <text x="143" y="65" text-anchor="middle" fill="currentColor">块1</text>
+  <path d="M 166 60 q 10 -12 20 0 q 10 12 20 0 q 10 -12 20 0 q 10 12 20 0" fill="none" stroke="oklch(0.55 0.13 250)" stroke-width="2"/>
+  <rect x="266" y="40" width="46" height="40" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+  <text x="289" y="65" text-anchor="middle" fill="currentColor">块2</text>
+  <line x1="312" y1="60" x2="392" y2="60" stroke="var(--ink3)" stroke-width="2"/>
+  <text x="95" y="30" fill="var(--ink3)" font-size="11">墙</text>
+  <text x="420" y="65" fill="currentColor">墙</text>
+  <path d="M 143 14 L 143 34" stroke="oklch(0.68 0.15 55)" stroke-width="2.5" marker-end="url(#arP2a)"/>
+  <defs><marker id="arP2a" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="oklch(0.68 0.15 55)"/></marker></defs>
+  <text x="118" y="12" fill="oklch(0.68 0.15 55)" font-size="12">F₁(橙 = 源)</text>
+  <text x="400" y="110" fill="var(--ink3)" font-size="12">右边的方程:每个块的受力平衡</text>
+  <text x="400" y="96" fill="var(--ink3)" font-size="12">耦合:中间弹簧把两块连起来</text>
+</svg>
+```
+
+图里每个部件对应 $A$ 的一个元素:对角线 = 各自挂在墙上的弹簧,非对角线 = 中间那根耦合弹簧。
+
 ```capsule K1 · 矩阵与逆,最少必要版
 - 矩阵 $A$ 乘向量 = 一种"线性混合"。
 - $A\,x=b$ 的意思是:已知混合规则 $A$ 和结果 $b$,反推原料 $x$。
@@ -89,6 +113,36 @@ $$A^{-1}=\frac{1}{5}\begin{pmatrix}2 & -1\\ -1 & 3\end{pmatrix}$$
 第一列就是"戳第 1 块的响应",第二列就是"戳第 2 块的响应"。
 **矩阵逆不是抽象符号,它就是一张"单位敲击响应表"。**
 
+```visual
+<svg viewBox="0 0 640 210" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <text x="110" y="24" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">戳块1(b₁=1)</text>
+  <text x="110" y="40" text-anchor="middle" fill="var(--ink3)" font-size="11">响应 = A⁻¹ 第 1 列</text>
+  <line x1="40" y1="150" x2="180" y2="150" stroke="currentColor" stroke-width="2"/>
+  <circle cx="60" cy="150" r="7" fill="oklch(0.72 0.12 250)"/>
+  <circle cx="110" cy="150" r="7" fill="oklch(0.72 0.12 250)"/>
+  <path d="M 60 143 L 60 118" stroke="oklch(0.68 0.15 55)" stroke-width="2.5"/>
+  <path d="M 110 143 L 110 156" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
+  <text x="60" y="172" text-anchor="middle" fill="var(--ink3)" font-size="11">+0.4</text>
+  <text x="110" y="176" text-anchor="middle" fill="var(--ink3)" font-size="11">−0.2</text>
+  <text x="390" y="24" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">戳块2(b₂=1)</text>
+  <text x="390" y="40" text-anchor="middle" fill="var(--ink3)" font-size="11">响应 = A⁻¹ 第 2 列</text>
+  <line x1="320" y1="150" x2="460" y2="150" stroke="currentColor" stroke-width="2"/>
+  <circle cx="370" cy="150" r="7" fill="oklch(0.72 0.12 250)"/>
+  <circle cx="420" cy="150" r="7" fill="oklch(0.72 0.12 250)"/>
+  <path d="M 370 143 L 370 156" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
+  <path d="M 420 143 L 420 118" stroke="oklch(0.68 0.15 55)" stroke-width="2.5"/>
+  <text x="370" y="176" text-anchor="middle" fill="var(--ink3)" font-size="11">−0.2</text>
+  <text x="420" y="172" text-anchor="middle" fill="var(--ink3)" font-size="11">+0.6</text>
+  <text x="555" y="80" text-anchor="middle" fill="currentColor" font-size="12">并排放好 = A⁻¹</text>
+  <path d="M 480 100 L 530 80" stroke="var(--ink3)" stroke-dasharray="4 3" fill="none"/>
+  <text x="555" y="104" text-anchor="middle" fill="var(--ink3)" font-size="11">↑</text>
+  <text x="555" y="118" text-anchor="middle" fill="var(--ink3)" font-size="11">响应表</text>
+</svg>
+```
+
+图上的数字就是算出来的响应:橙箭头 = 你戳的位置(源,橙色),蓝 = 系统里各处的响应。
+注意一个细节:戳块 1,块 2 会被**反向**拖动(−0.2)——中间弹簧被压缩,把块 2 往回顶。
+
 自查(已实算,见 dossier V-03):$A\cdot A^{-1}=I$ 成立;
 $b=(1,0)$ 时 $x=(0.4,-0.2)$,与上式一致。[C003]
 
@@ -115,6 +169,25 @@ $$x=A^{-1}\Big(2\,e_1+3\,e_2\Big)=2\,\underbrace{A^{-1}e_1}_{\text{戳第 1 块�
 
 **任意源的响应 = 单位敲击响应的加权和,权重就是源本身。**[C002,C003]
 
+```visual
+<svg viewBox="0 0 640 190" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <text x="100" y="26" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">2 × 戳块1 的响应</text>
+  <line x1="30" y1="150" x2="170" y2="150" stroke="currentColor" stroke-width="2"/>
+  <path d="M 60 150 L 100 92 L 140 150" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
+  <text x="100" y="80" text-anchor="middle" fill="var(--ink3)" font-size="11">×2</text>
+  <text x="215" y="130" fill="currentColor" font-size="18">+</text>
+  <text x="330" y="26" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">3 × 戳块2 的响应</text>
+  <line x1="260" y1="150" x2="400" y2="150" stroke="currentColor" stroke-width="2"/>
+  <path d="M 290 150 L 330 69 L 370 150" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
+  <text x="330" y="58" text-anchor="middle" fill="var(--ink3)" font-size="11">×3</text>
+  <text x="440" y="130" fill="currentColor" font-size="18">=</text>
+  <text x="545" y="26" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">总响应 b=(2,3)</text>
+  <line x1="470" y1="150" x2="620" y2="150" stroke="currentColor" stroke-width="2"/>
+  <path d="M 500 150 L 545 46 L 590 150" fill="none" stroke="oklch(0.62 0.13 250)" stroke-width="3"/>
+  <text x="545" y="170" text-anchor="middle" fill="var(--ink3)" font-size="11">两个响应图形直接相加</text>
+</svg>
+```
+
 这就是"查表相加"合法的全部理由:线性。
 非线性系统里这条路直接断掉——P18 会专门讲。
 
@@ -138,6 +211,24 @@ S2 S17
 
 于是离散的"第 $j$ 列响应表"升级为连续的**二元函数**:
 
+```visual
+<svg viewBox="0 0 640 200" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <text x="320" y="20" text-anchor="middle" fill="var(--ink3)">把"一个点的单位力"逐步推到极限:宽度→0,高度→∞,面积恒等于 1</text>
+  <line x1="30" y1="165" x2="190" y2="165" stroke="currentColor"/>
+  <rect x="88" y="90" width="44" height="75" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+  <text x="110" y="186" text-anchor="middle" fill="var(--ink3)">宽 w</text>
+  <text x="110" y="80" text-anchor="middle" fill="var(--ink3)">高 1/w</text>
+  <line x1="230" y1="165" x2="390" y2="165" stroke="currentColor"/>
+  <rect x="296" y="45" width="28" height="120" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+  <text x="310" y="186" text-anchor="middle" fill="var(--ink3)">更窄</text>
+  <line x1="450" y1="165" x2="610" y2="165" stroke="currentColor"/>
+  <path d="M 528 165 L 530 22 L 532 165 Z" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+  <text x="530" y="186" text-anchor="middle" fill="var(--ink3)">→ δ(x−x′)</text>
+  <text x="320" y="40" text-anchor="middle" fill="oklch(0.68 0.13 92)" font-size="13">面积 = 宽 × 高 = 1(黄色,恒定)</text>
+</svg>
+```
+
+
 $$\underbrace{G(x,\,x')}_{\text{在 }x'\text{ 敲一下,}x\text{ 处的响应}}$$
 
 单位冲击 δ 用黄色标记,源用橙色,响应用蓝色——全文不变,看到颜色就知道角色。
@@ -158,7 +249,7 @@ S3 S18
 三件立刻能说的事:
 
 1. **输入**:一个点源的位置 $x'$;**输出**:全场响应 $x\mapsto G(x,x')$。
-2. **量纲**:$G$ 的量纲 = 响应量纲 ÷ 力量纲。1D 弦里响应是长度、源是力,所以 $[G]=\mathrm{m/N}$。
+2. **量纲**(认真对待,这是个坑):本 Lecture 的弦方程用**归一化模型**——张力 $T=1$ 已被吸收进算符,一切用**约化单位**。此时 $L=-\frac{d^2}{dx^2}$ 的作用是 1/长度²,右端 δ 也是 1/长度,于是 $[G]=$ 长度,$[f]=1/$ 长度,$[G]\times[f]=$ 长度 = $[u]$,自洽。若写回**物理单位**的弦 $-T\,u''=q$($[T]=$ N,$[q]=$ N/m),则 $[G]=\mathrm{m/N}$。两种写法都对;混着写才是错——我们全文只用归一化版,并在 P10 的表里注明。[C004]
 3. **角色**:它是"系统的指纹"。两根不同的弦,即使方程长得一样,弦的松紧不同,$G$ 就不同。
 
 $G$ 的正式名字:格林函数。为什么叫这个名字,P07 讲完定义你就不会再问。[C001]
@@ -180,6 +271,27 @@ $$L\,G(x,x')=\delta(x-x')$$
 
 > **在 $x'$ 敲单位一下,得到的形状,依然满足弦的方程。**
 
+```visual
+<svg viewBox="0 0 640 150" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <defs><marker id="arP7" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
+  <rect x="40" y="45" width="140" height="52" rx="8" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+  <text x="110" y="68" text-anchor="middle" fill="currentColor">单位点源</text>
+  <text x="110" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">δ(x − x′)(黄色)</text>
+  <rect x="250" y="45" width="140" height="52" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="320" y="68" text-anchor="middle" fill="currentColor">系统 L</text>
+  <text x="320" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">弦:−d²/dx² + 边界</text>
+  <rect x="460" y="45" width="140" height="52" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="530" y="68" text-anchor="middle" fill="currentColor">响应形状 G</text>
+  <text x="530" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">蓝:三角形帆(P09)</text>
+  <line x1="180" y1="71" x2="244" y2="71" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP7)"/>
+  <line x1="390" y1="71" x2="454" y2="71" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP7)"/>
+  <text x="212" y="60" text-anchor="middle" fill="var(--ink3)" font-size="11">喂进去</text>
+  <text x="422" y="60" text-anchor="middle" fill="var(--ink3)" font-size="11">吐出来</text>
+  <text x="320" y="128" text-anchor="middle" fill="var(--ink3)" font-size="12">这张"流水线证"就是 LG = δ:输出恰好是 G 的名字</text>
+</svg>
+```
+
 离散对照一模一样:$A\,g_j=e_j$(第 $j$ 列)。连续版只是把"列"换成"$x'$"。
 
 ```capsule K-小 · 微分算符,一句话
@@ -195,24 +307,44 @@ S2 S3 S10
 
 ## P08 · 边界条件:G 是一族函数,不是一条
 
-同一个 $L=-\frac{d^2}{dx^2}$,换边界,得到不同的 G:
+要唯一确定一个 G,方程 $LG=\delta$ 只给了一半,另一半由**问题的类型**决定 [C001]。分两类,别混:
 
-- 两端**固定**(弦):$G(0)=G(1)=0$
+**静态问题**(弦、静电、静弹性):$L$ + **边界条件**。
+
+- 两端**固定**(弦):$G(0)=G(1)=0$ → 三角帆形(P09)
 - 一端自由(杆):一端 $G=0$,另一端斜率为零
-- **无限长**:没有边界,只要求 $|x|\to\infty$ 时衰减、且取"推迟"支(先因后果)
+- **整个实轴(无边界)**:这时 $-d^2/dx^2$ 的基本解是 $G=\frac{1}{2}|x-x'|$ 附近的一族——
+  它随距离**线性增长**,根本不衰减!想让它收敛,必须人为加一个归一化条件(比如要求 $G$ 在某点为零)或换成有限域。[C021]
+  这是最容易踩的坑:**"无限长 + 衰减"对静态 1D Laplace 算符根本不成立**。
 
-差异大到什么程度?无限长域的 $G$ 是一条直线段表达式,两端固定域是三角帆形(P09),
-周期域又是另一副面孔。
+**含时问题**(波、热、量子):$L$ + **初始条件** + **因果约定**。
 
-```callout 立账本上一条高频误区 [C016]
-"G 就是一条公式"是错的。正确说法:**L + 边界条件,共同唯一确定一个 G。**
-Physics SE 高赞问题里,"为什么我的 G 和书上的不一样"的答案几乎都是:边界不同。
+- 这才轮到"推迟/超前"出场:推迟 G 只在源**之后**响应,超前 G 只在源**之前**。
+- 因果选择是**时间**问题的专利。把它塞进静态例子(比如 P13 的静电),是常见错误。[C012]
+
+```visual
+<svg viewBox="0 0 640 210" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <text x="160" y="26" text-anchor="middle" fill="currentColor" font-size="13">静态:L + 边界条件</text>
+  <rect x="60" y="40" width="200" height="120" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <path d="M 90 140 L 160 66 L 230 140" fill="none" stroke="oklch(0.62 0.13 250)" stroke-width="2.5"/>
+  <text x="160" y="150" text-anchor="middle" fill="var(--ink3)" font-size="11">两端固定 → 三角帆</text>
+  <text x="480" y="26" text-anchor="middle" fill="currentColor" font-size="13">含时:L + 初值 + 因果约定</text>
+  <rect x="380" y="40" width="200" height="120" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <path d="M 400 120 L 440 120 L 470 84 L 500 84 L 530 60 L 560 60" fill="none" stroke="oklch(0.62 0.13 250)" stroke-width="2.5"/>
+  <text x="480" y="150" text-anchor="middle" fill="var(--ink3)" font-size="11">推迟支:波纹只向未来扩</text>
+  <text x="320" y="200" text-anchor="middle" fill="var(--ink3)">同一句口诀:方程给一半,条件给另一半</text>
+</svg>
 ```
 
-所以后面每讲一个领域的 G,第一句话都是:什么域、什么边界。[C016]
+```callout 账本高频误区 [C016]
+"G 就是一条公式"是错的。正确说法:**L + 边界条件(静态)或 L + 初值 + 因果约定(含时),共同唯一确定一个 G。**
+Physics SE 高赞问题里,"为什么我的 G 和书上的不一样"的答案几乎都是:边界或因果约定不同。
+```
+
+所以后面每讲一个领域的 G,第一句话都是:什么域、什么边界、静态还是含时。[C016]
 
 ```sources
-S2 S10
+S2 S10 S18
 ```
 
 ## P09 · 完整例题:两端固定弦,一算到底
@@ -310,12 +442,18 @@ S2 S18
 
 $$u(x)=\int G(x,x')\,f(x')\,dx'$$
 
-| 符号 | 含义 | 量纲(1D 弦) |
+| 符号 | 含义 | 量纲(归一化模型,T=1) |
 |---|---|---|
-| $f(x')$ | 外部源(每单位长度受到的力) | N/m |
+| $f(x')$ | 外部源(每单位长度的源强度) | 1/m |
 | $dx'$ | 一个微小源区域 | m |
-| $G(x,x')\,dx'$ | 这个小区域贡献给 $x$ 的响应 | m |
+| $G(x,x')$ | 单位点源的响应核 | m |
+| $G(x,x')\,f(x')\,dx'$ | 这个小源区域贡献给 $x$ 的响应 | m |
 | $u(x)$ | 全部小源响应的叠加 | m |
+
+自洽核对:$[G]\,[f]\,[dx'] = \mathrm{m}\cdot\tfrac{1}{\mathrm{m}}\cdot\mathrm{m}=\mathrm{m}=[u]$。✓(dossier V-04)
+
+> 写回物理单位的弦 $-T\,u''=q$($[T]=\mathrm{N}$,$[q]=\mathrm{N/m}$):$[G]=\mathrm{m/N}$。
+> 结构一模一样,$T$ 只是坐进了算符。全文其余页面沿用归一化模型。
 
 四个性质,逐条对应你已见过的东西:
 
@@ -347,6 +485,32 @@ magic 用到 $L\,G=\delta$ 上:微分变乘法,δ 变常数 1,于是
 
 $$\hat G(k)=\frac{1}{\hat L(k)}$$
 
+```visual
+<svg viewBox="0 0 640 190" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <text x="140" y="24" text-anchor="middle" fill="currentColor" font-size="13">实空间:卷积(麻烦)</text>
+  <text x="500" y="24" text-anchor="middle" fill="currentColor" font-size="13">傅里叶空间:乘法(省事)</text>
+  <rect x="50" y="40" width="180" height="60" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="140" y="66" text-anchor="middle" fill="currentColor">u = G ⊛ f</text>
+  <text x="140" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">逐点扫过整个域</text>
+  <rect x="410" y="40" width="180" height="60" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="500" y="66" text-anchor="middle" fill="currentColor">Û(k) = Ĝ(k) · f̂(k)</text>
+  <text x="500" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">每个 k 一次除法</text>
+  <path d="M 230 70 L 300 70" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arF1)"/>
+  <path d="M 410 100 L 340 100" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arF1)"/>
+  <defs><marker id="arF1" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
+  <text x="265" y="60" text-anchor="middle" fill="oklch(0.62 0.13 250)" font-size="11">傅里叶变换</text>
+  <text x="375" y="116" text-anchor="middle" fill="var(--ink3)" font-size="11">反变换回来</text>
+  <line x1="60" y1="140" x2="180" y2="140" stroke="currentColor"/>
+  <path d="M 60 138 L 90 120 L 120 138 L 150 114 L 180 132" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2"/>
+  <text x="120" y="158" text-anchor="middle" fill="var(--ink3)" font-size="11">锯齿状叠加</text>
+  <line x1="430" y1="140" x2="560" y2="140" stroke="currentColor"/>
+  <circle cx="475" cy="128" r="4" fill="oklch(0.72 0.12 250)"/><circle cx="500" cy="121" r="4" fill="oklch(0.72 0.12 250)"/><circle cx="525" cy="128" r="4" fill="oklch(0.72 0.12 250)"/>
+  <text x="495" y="158" text-anchor="middle" fill="var(--ink3)" font-size="11">几个独立的数</text>
+  <text x="320" y="182" text-anchor="middle" fill="var(--ink3)">对称性把"解方程"降级成"做除法"</text>
+</svg>
+```
+
 对 $L=-\frac{d^2}{dx^2}+m^2$:$\hat L(k)=k^2+m^2$,故 $\hat G(k)=\frac{1}{k^2+m^2}$。✓ 极限自查:$k\to\infty$ 时 $\hat G\to 0$——尖锐源的高频响应衰减,合理。[C006]
 
 **为什么这一页重要**:凡是有平移对称的问题(均匀膜、无限栅格、自由空间),
@@ -356,22 +520,45 @@ $$\hat G(k)=\frac{1}{\hat L(k)}$$
 S2 S17
 ```
 
-## P12 · 一个思想,四具身体
+## P12 · 一个结构,四具身体
 
-同一个数学结构,在不同学科里各有名字。不是比喻,是**同一个东西**:
+同一套数学结构,在不同学科里各有名字。但它们的"亲疏"不同,分四级说才严谨:
 
-| 名字 | 领域 | "敲一下"是什么 | "响应"是什么 |
-|---|---|---|---|
-| 矩阵逆的列 | 线性代数 | 单位向量 $e_j$ | 解向量 $x$ |
-| 冲击响应 $h(t)$ | 信号/电路 | 单位电压脉冲 | 输出波形 |
-| 格林函数 $G$ | 数学物理 | 单位点源 | 场分布 |
-| 传播子 / 核 | 量子/统计 | 一点处的粒子 | 它跑到别处的振幅/概率 |
+| 名字 | 领域 | "敲一下"是什么 | "响应"是什么 | 与 G 的关系 |
+|---|---|---|---|---|
+| 矩阵逆的列 | 线性代数 | 单位向量 $e_j$ | 解向量 $x$ | **同一对象的离散/连续两种记法** |
+| 冲击响应 $h(t)$ | 信号/电路 | 单位电压脉冲 | 输出波形 | **同一结构**(时域 Green 函数) |
+| 传播子 / 核 | 量子/统计 | 一点处的粒子 | 它跑到别处的振幅/概率 | **同一结构 + 因果约定与 convention 因子** |
+| 传递函数 | 控制 | —(频域视角) | 频率响应 | **变换域表示**:传递函数 = 冲击响应的傅里叶/拉普拉斯像 |
+| 感受率 susceptibility | 统计物理 | 微扰场 | 响应量密度 | **近亲响应函数**:定义与因果结构随领域约定而变 |
 
-为什么必然同构?三个要件完全相同:**线性系统、单位刺激、叠加求和**。
-凡满足这三件,背后自动是 $G$。
+一句话分级:**有的是同一个对象换记法,有的是同一个结构换表示,有的是变换域里的像,有的是近亲。**[C003,C013]
 
-还有一串近亲:传递函数(控制)、感受率(susceptibility,统计物理)、影响系数(有限元)。
-它们都是 $G$ 在各自方言里的叫法。学新领域时先问一句:**这里的"单位敲击"是什么?**常能一步到位。[C003,C013]
+```visual
+<svg viewBox="0 0 640 240" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <defs><marker id="arC12" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
+  <rect x="240" y="20" width="160" height="44" rx="22" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="320" y="47" text-anchor="middle" fill="currentColor">线性响应结构</text>
+  <text x="320" y="82" text-anchor="middle" fill="var(--ink3)" font-size="11">线性系统 · 单位刺激 · 叠加求和</text>
+  <text x="110" y="130" text-anchor="middle" fill="currentColor">矩阵逆的列</text>
+  <text x="110" y="146" text-anchor="middle" fill="var(--ink3)" font-size="10.5">同一对象(离散)</text>
+  <text x="250" y="130" text-anchor="middle" fill="currentColor">冲击响应 h(t)</text>
+  <text x="250" y="146" text-anchor="middle" fill="var(--ink3)" font-size="10.5">同一结构(时域)</text>
+  <text x="390" y="130" text-anchor="middle" fill="currentColor">传播子</text>
+  <text x="390" y="146" text-anchor="middle" fill="var(--ink3)" font-size="10.5">同一结构+因果约定</text>
+  <text x="530" y="130" text-anchor="middle" fill="currentColor">传递函数</text>
+  <text x="530" y="146" text-anchor="middle" fill="var(--ink3)" font-size="10.5">变换域表示</text>
+  <path d="M 320 92 L 110 118" stroke="var(--ink3)" fill="none" marker-end="url(#arC12)"/>
+  <path d="M 300 92 L 255 118" stroke="var(--ink3)" fill="none" marker-end="url(#arC12)"/>
+  <path d="M 340 92 L 385 118" stroke="var(--ink3)" fill="none" marker-end="url(#arC12)"/>
+  <path d="M 380 74 L 528 118" stroke="var(--ink3)" stroke-dasharray="4 3" fill="none" marker-end="url(#arC12)"/>
+  <text x="320" y="188" text-anchor="middle" fill="var(--ink3)" font-size="11">虚线 = 差一次傅里叶/拉普拉斯变换;实线 = 换记法或加约定</text>
+  <text x="320" y="212" text-anchor="middle" fill="var(--ink3)" font-size="11">susceptibility、影响系数等近亲,同样是"响应函数"家族的方言</text>
+</svg>
+```
+
+学新领域时先问一句:**这里的"单位敲击"是什么?**常能一步到位。
 
 ```sources
 S3 S4 S17
@@ -379,18 +566,25 @@ S3 S4 S17
 
 ## P13 · 静电学:你早就在用它
 
-静电势满足 $-\nabla^2\phi=\rho/\varepsilon_0$。它的 $G$ 是:
+静电势满足 $-\nabla^2\phi=\rho/\varepsilon_0$。这里要区分**两个核**,混用是常见错误:
 
-$$G(\mathbf r,\mathbf r')=\frac{1}{4\pi|\mathbf r-\mathbf r'|}$$
+**数学核(算符 $-\nabla^2$ 的格林函数)**——量纲 1/长度:
 
-代入 $u=\int Gf$:任意电荷分布的势 $=$ 每个点电荷的库仑势**求和**。
-你从高中就会的"点电荷叠加",底层就是格林函数。[C007]
+$$G_L(\mathbf r,\mathbf r')=\frac{1}{4\pi|\mathbf r-\mathbf r'|},\qquad -\nabla^2 G_L=\delta(\mathbf r-\mathbf r')$$
+
+**物理响应核(单位电荷产生的电势)**——量纲 V/C:
+
+$$K_\phi(\mathbf r,\mathbf r')=\frac{1}{4\pi\varepsilon_0|\mathbf r-\mathbf r'|}$$
+
+关系一句话:$K_\phi = G_L/\varepsilon_0$。物理常数 $\varepsilon_0$ 坐进了算符的倒数里,结构不变。
+代入 $u=\int Gf$ 的静电版:任意电荷分布的势 $=$ 每个点电荷的库仑势**求和**。
+你从高中就会的"点电荷叠加",底层就是这个核。[C007]
 
 - **Formula anatomy(快版)**:$|\mathbf r-\mathbf r'|$ = 两点距离;$4\pi$ = 三维球面积分常数;
-  $G$ 量纲 = 势/电荷;$\mathbf r'\to\mathbf r$ 时发散 = 点电荷自能发散(物理上用有限半径截断)。
-- **极限自查**:$|\mathbf r|\to\infty$,$G\to 0$——离电荷越远势越弱。✓
+  $K_\phi$ 量纲 = V/C;$\mathbf r'\to\mathbf r$ 时发散 = 点电荷自能发散(物理上用有限半径截断)。
+- **极限自查**:$|\mathbf r|\to\infty$,$K_\phi\to 0$——离电荷越远势越弱。✓
 - **镜像法**:接地平面旁的点电荷,$G$ = 真电荷 + 一个"假想镜像"的叠加。
-  P08 说的"边界决定 G",这里是最著名的例子。
+  P08 说的"静态问题由边界决定 G",这里是最著名的例子。
 
 ```sources
 S2 S3
@@ -421,7 +615,8 @@ S9 S8
 你的领域,正面使用场景。
 
 **产业事实**:在 pMOS 源/漏嵌入压缩应变的 SiGe,提升空穴迁移率;
-应变硅技术自 Intel 90nm 节点(约 2002)起进入规模量产,是"应变工程"的起点。[C011]
+Intel 在 90nm 工艺代将 strained silicon 引入量产,90nm 于 2003 年进入生产爬坡
+(Intel 官方背景材料 [C011])。
 
 **力学链条**:
 
@@ -429,18 +624,22 @@ S9 S8
 SiGe 晶格常数 > Si → 界面失配 → 沟道受压应变(迁移率↑)
 → 失配过大时产生失配位错(器件杀手)
 → 位错应力场 = 本征应变 ⊛ 应力 Green 函数(P14 的三步)
-→ TCAD 工艺仿真用它预测应力分布与位错风险
+→ 解析/半解析路线:线性几何下的快速估计与校验
 ```
 
-其中"⊛"就是 $u=\int Gf$ 的弹性版。TCAD 工具预测"SiGe 体积分数多大、
-嵌入多深会触发位错",核心部件之一就是这个卷积。
+**TCAD 里的真实分工**(据公开文献与厂商文档,厂商内部实现细节不完全公开,可能随版本变化 [C023]):
+工业 TCAD 的应力计算主流是**连续介质数值求解**(FEM/工艺仿真,如 Krzeminski 2012 把工艺仿真与实验应力映射对比);
+Green 函数卷积走的是**解析/半解析路线**——在几何足够线性、基本解已知的场景里,
+它提供快速估计和解析校验,例如量子线结构的应力解析(P14 的 S8 正是为 quantum-wire 结构而写)。
+两者是分工,不是替代。
+
 本页刻意不给 SiGe 弹性常数的具体数值(dossier open question:未查证),结构先立住。
 
 科研延伸:各向异性、压电、双材料的 G 有闭式解析(Pan & Chen 专著),
-是半导体力学仿真的底层库。[C010]
+是半导体力学解析计算的底层库。[C010]
 
 ```sources
-S12 S9 S8
+S19 S12 S9 S8
 ```
 
 ## P16 · 波与量子:因果性进入 G
@@ -452,10 +651,14 @@ S12 S9 S8
 
 "G 是一族函数"再加一条:同一个 L、同一边界,还可以选**因果约定**。[C012]
 
-量子力学里,传播子 $\langle x'|e^{-iHt}|x\rangle$ 是薛定谔算符的 G:
-"在 $x$ 放一个粒子,它在 $x'$ 出现的振幅"。量子场论里整个理论就是围绕各种 G
-(传播子)组织的。Strassler 有个好类比:**G 之于波,如虚粒子之于实粒子**——
-G 是"中间量",把源和响应连起来,它自己不是可观测的波。[C013]
+量子力学里,传播子 $\langle x'|e^{-iH(t-t')}|x\rangle$——"在 $x$ 放一个粒子,它在 $x'$ 出现的振幅"——
+与薛定谔算符的 retarded Green 函数是**同一响应结构的不同表示**。
+严格式要加两样东西:因果阶跃函数(只在 $t>t'$ 时非零)和约定因子(常见形式
+$G^R(t,t')=-\frac{i}{\hbar}\Theta(t-t')\langle x'|U(t,t')|x\rangle$,系数随约定而变)。
+所以不要写成"传播子就是 G"的等号;要说"同一结构、差一个约定外衣"。[C013]
+
+量子场论把这套语言推到极致:理论围绕各种 G(传播子)组织。Strassler 有个好类比:
+**G 之于波,如虚粒子之于实粒子**——G 是"中间量",把源和响应连起来,它自己不是可观测的波。
 
 ```sources
 S2 S5 S11
@@ -466,6 +669,34 @@ S2 S5 S11
 把 P11 的傅里叶除法和 P08 的边界条件合起来,就是现代量子输运的引擎。
 
 开放器件 = 中间一个小系统 + 左右两个电极(接触)。电子在接触间输运。
+
+```visual
+<svg viewBox="0 0 640 200" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <defs><marker id="arP17" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="oklch(0.68 0.15 55)"/></marker>
+  <marker id="arP17b" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="oklch(0.68 0.15 55)"/></marker></defs>
+  <rect x="40" y="60" width="120" height="80" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="100" y="95" text-anchor="middle" fill="currentColor">左接触</text>
+  <text x="100" y="115" text-anchor="middle" fill="var(--ink3)" font-size="11">化学势 μ_L</text>
+  <rect x="480" y="60" width="120" height="80" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="540" y="95" text-anchor="middle" fill="currentColor">右接触</text>
+  <text x="540" y="115" text-anchor="middle" fill="var(--ink3)" font-size="11">化学势 μ_R</text>
+  <rect x="240" y="52" width="160" height="96" rx="8" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+  <text x="320" y="92" text-anchor="middle" fill="currentColor">器件区 H</text>
+  <text x="320" y="112" text-anchor="middle" fill="var(--ink3)" font-size="11">小系统(可原子级)</text>
+  <path d="M 160 78 C 205 78 205 78 238 78" stroke="oklch(0.68 0.15 55)" stroke-width="2.2" fill="none" marker-end="url(#arP17)"/>
+  <path d="M 164 122 C 205 122 205 122 234 122" stroke="oklch(0.68 0.15 55)" stroke-width="2.2" fill="none" marker-end="url(#arP17b)"/>
+  <path d="M 478 78 C 440 78 440 78 404 78" stroke="oklch(0.68 0.15 55)" stroke-width="2.2" fill="none" marker-end="url(#arP17)"/>
+  <path d="M 404 122 C 440 122 440 122 476 122" stroke="oklch(0.68 0.15 55)" stroke-width="2.2" fill="none" marker-end="url(#arP17b)"/>
+  <text x="200" y="66" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">Σ_L</text>
+  <text x="200" y="140" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">流入</text>
+  <text x="440" y="66" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">Σ_R</text>
+  <text x="440" y="140" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">流出</text>
+  <text x="320" y="180" text-anchor="middle" fill="var(--ink3)" font-size="12">自能 Σ = 把"外面世界"焊进小系统的等效项(P08 边界条件的现代表示)</text>
+</svg>
+```
+
 **NEGF(非平衡格林函数)方法**:
 
 $$G^R(\omega)=\bigl[\omega+i\eta-H-\Sigma_L-\Sigma_R\bigr]^{-1}$$
@@ -527,7 +758,7 @@ S10 S2 S5
 
 工程选择题:BEM 适合"线性 + 无限域 + 基本解已知";
 FEM 适合"复杂材料 + 有限域";NEGF 适合"量子 + 开放"。
-选择依据就是 P08/P18 讲的边界与线性条件。[C017]
+选择依据就是 P08/P18 讲的边界与线性条件。[C017,C023]
 
 ```sources
 S13 S6
@@ -537,19 +768,21 @@ S13 S6
 
 经典理论(本 Lecture 的全部内容)已停止移动;前沿在三个方向:
 
-- **神经算子学格林函数**(2023–):用 FNO/LNO 类网络直接学"源→响应"映射,
-  目标是绕开逐次求解。Green's Neural Operator 已扩展到 Neumann 边界。
-  注意:多为预印本,精度与可信度仍在建设中。[C018]
-- **关联体系的机器学习 G**(2023–):用核方法/RNN 预测 Hubbard 模型的自能,
-  替代昂贵的多体计算。[C018]
-- **大规模 NEGF**(2024):rNEGF 用随机化方法把原子级量子输运推到百万原子尺度
-  (已刊 PRB)。[C019]
+- **神经算子**(2023–):学"源→响应"映射,绕开逐次求解。这条线里要分清两条不同的工作:
+  **Laplace Neural Operator**(Cao et al.)已于 2024 年发表于 Nature Machine Intelligence,
+  它基于 Laplace 域的极点-留数表示学习算子映射;而 **Green's Neural Operator with Neumann
+  边界条件**是另一条更晚的研究线,目前还是预印本。两条线都还年轻,精度与可信度在建设中。[C018,C022]
+- **关联体系的机器学习 G**(2025):用核方法(KRR)从平均场特征预测 1D Hubbard 模型的
+  虚频自能,再经 Dyson 方程换回实频格林函数——替代昂贵的多体计算。已刊 J. Phys.: Condens.
+  Matter;演示体系是一维,外推到真实材料仍是开放问题。[C024]
+- **大规模 NEGF**(2024):rNEGF 用随机化方法把量子输运推到 **Hamiltonian 维度 4×10⁵**
+  的体系(已刊 PRB;注意是矩阵维度,不是"百万原子")。[C019]
 
 一条主线值得记住:**前沿没有推翻"单位敲击响应"这个结构,而是在让"造这张表"更便宜**——
 用学习代替求解,用随机化代替精确逆。
 
 ```sources
-S14 S15 S7
+S14 S20 S15 S7
 ```
 
 ## P21 · 我学会了吗?

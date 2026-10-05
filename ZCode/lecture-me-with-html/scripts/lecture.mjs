@@ -177,7 +177,7 @@ function parseSources(blk) {
 const pagesHtml = pages.map((p, i) => {
   let md = p.md;
   /* fenced extensions */
-  const fence = /```(sources|quiz|capsule|lab|bib|callout)([^\n]*)\n([\s\S]*?)```/g;
+  const fence = /```(sources|quiz|capsule|lab|bib|callout|visual|svg)([^\n]*)\n([\s\S]*?)```/g;
   const slots = [];
   md = md.replace(fence, (_, kind, info, blk) => {
     const ph = "\x00F" + slots.length + "\x00"; slots.push({ kind, info: info.trim(), blk }); return ph;
@@ -191,6 +191,7 @@ const pagesHtml = pages.map((p, i) => {
     else if (s.kind === "lab") rep = `<div class="lab">${s.blk}</div>`;
     else if (s.kind === "capsule") rep = `<div class="capsule"><span class="ctag">PREREQUISITE CAPSULE · ${esc(s.info || "K")}</span>${mdToHtml(s.blk)}</div>`;
     else if (s.kind === "callout") rep = `<div class="callout"><b>${esc(s.info)}</b>${mdToHtml(s.blk)}</div>`;
+    else if (s.kind === "visual" || s.kind === "svg") rep = `<div class="visual">${s.blk}</div>`;
     else if (s.kind === "bib") rep = "";
     html = html.replace("\x00F" + slots.indexOf(s) + "\x00", rep);
   }
@@ -249,6 +250,72 @@ const html = template
   .replace("{{MATH_CSS}}", mathCss())
   .replace("{{KEYJSON}}", JSON.stringify({ page: "lecture:" + (meta.title || "x") + ":page", mode: "lecture:" + (meta.title || "x") + ":mode" }));
 
+/* ---------- dossier audit (--dossier) ---------- */
+const DOSSIER = argOf("--dossier");
+const claims = new Map(); // id -> {sources:[], conf, used:[]}
+const dossierSources = new Set();
+if (DOSSIER) {
+  if (!existsSync(DOSSIER)) { errors.push(`dossier 文件不存在: ${DOSSIER}`); }
+  else {
+    const d = readFileSync(DOSSIER, "utf8");
+    for (const line of d.split("\n")) {
+      const cm = line.match(/^\|\s*(C\d+)\s*\|/);
+      if (cm) {
+        // 表格单元里的 \| 是 LaTeX 转义管道,先保护再切列
+        const cells = line.replace(/\\\|/g, "\u0001").split("|").map(x => x.replace(/\u0001/g, "\\|").trim());
+        // | ID | Claim | Type | 来源 | 置信 | 假设 | 用于 |
+        claims.set(cm[1], {
+          sources: (cells[4] || "").match(/S\d+/g) || [],
+          conf: (cells[5] || "high").toLowerCase(),
+          used: (cells[7] || "").match(/P\d+/g) || []
+        });
+      }
+      const sm = line.match(/^\s*-\s*\*\*(S\d+)\*\*/);
+      if (sm) dossierSources.add(sm[1]);
+    }
+    /* claim integrity: lecture 引用的 Cxxx 必须在 dossier 中存在 */
+    for (const p of pages) {
+      for (const m of p.md.matchAll(/\bC\d{3}\b/g)) {
+        if (!claims.has(m[0])) errors.push(`${p.id} 引用 ${m[0]},但 dossier 的 Claim Ledger 中没有它`);
+      }
+    }
+    /* source integrity: claim 的来源必须在 dossier Sources 中登记 */
+    for (const [id, c] of claims) {
+      for (const s of c.sources) {
+        if (!dossierSources.has(s)) errors.push(`${id} 的来源 ${s} 未在 dossier Sources 区登记`);
+      }
+    }
+    /* claim-to-page: used-in 声明与实际引用互相核对 */
+    const citedOn = new Map();
+    for (const p of pages) for (const m of p.md.matchAll(/\bC\d{3}\b/g)) {
+      const id = m[0]; if (!claims.has(id)) continue;
+      if (!citedOn.has(id)) citedOn.set(id, new Set());
+      citedOn.get(id).add(p.id);
+    }
+    for (const [id, c] of claims) {
+      const used = c.used, actual = [...(citedOn.get(id) || [])];
+      for (const pg of used) if (!actual.some(a => a === pg)) warnings.push(`${id} 声明用于 ${pg},但该页未引用它`);
+      for (const pg of actual) if (!used.includes(pg)) warnings.push(`${id} 在 ${pg} 被引用,但 used-in 未声明(补账)`);
+      if (actual.length === 0) warnings.push(`${id} 是孤儿 claim:没有任何页面引用`);
+    }
+    /* confidence: medium/low claim 所在页必须出现缓和语 */
+    const HEDGE = [/约/, /近似/, /据报道/, /一种说法/, /预印本/, /大致/, /可能/, /区间/, /据.*记载/, /medium/i];
+    for (const [id, c] of claims) {
+      if (c.conf !== "medium" && c.conf !== "low") continue;
+      for (const p of pages) {
+        if (!p.md.includes("[" + id + "]")) continue;
+        if (!HEDGE.some(h => h.test(p.md)))
+          warnings.push(`${id} 置信为 ${c.conf},但 ${p.id} 页面缺少缓和措辞(约/近似/预印本…)`);
+      }
+    }
+    /* orphan bib sources: 没有任何页面 sources 块引用 */
+    const pageSrcIds = new Set();
+    for (const p of pages) for (const m of p.md.matchAll(/```sources\n([\s\S]*?)```/g))
+      for (const s of m[1].match(/S\d+/g) || []) pageSrcIds.add(s);
+    for (const s of Object.keys(BIB)) if (!pageSrcIds.has(s)) warnings.push(`来源 ${s} 是孤儿:没有任何页面引用`);
+  }
+}
+
 /* ---------- report ---------- */
 for (const w of warnings) console.log(`⚠ ${w}`);
 if (errors.length) {
@@ -256,12 +323,18 @@ if (errors.length) {
   console.error(`✗ lint 未通过(${errors.length} 个错误,${warnings.length} 个警告),不写文件。`);
   process.exit(1);
 }
-if (flag("--lint-only")) { console.log(`✓ lint 通过:${pages.length} 页,${warnings.length} 个警告`); process.exit(0); }
+if (flag("--lint-only")) {
+  const nQuiz = pages.reduce((a, p) => a + (p.md.match(/```quiz/g) || []).length, 0);
+  console.log(`✓ lint 通过:pages=${pages.length} bibSources=${Object.keys(BIB).length} claims=${DOSSIER ? claims.size : "n/a"} quiz=${nQuiz} warnings=${warnings.length}`);
+  process.exit(0);
+}
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, html);
 const kb = Math.round(html.length / 1024);
 console.log(`✓ ${OUT}`);
-console.log(`  ${pages.length} 页 · ${kb} KB · 数学:${KATEX ? "KaTeX 服务端渲染(离线)" : "降级为等宽块(未安装 katex)"}`);
+const nQuiz = pages.reduce((a, p) => a + (p.md.match(/```quiz/g) || []).length, 0);
+const nVis = pages.reduce((a, p) => a + (p.md.match(/```(?:visual|svg)/g) || []).length, 0);
+console.log(`  pages=${pages.length} bibSources=${Object.keys(BIB).length} claims=${DOSSIER ? claims.size : "n/a"} quiz=${nQuiz} visual=${nVis} labs=${pages.reduce((a,p)=>a+(p.md.match(/```lab/g)||[]).length,0)} · ${kb} KB · 数学:${KATEX ? "KaTeX 服务端渲染(离线)" : "降级为等宽块(未安装 katex)"}`);
 if (!flag("--no-open")) {
   try { const start = process.platform === "win32" ? "cmd" : "open";
     const a = process.platform === "win32" ? ["/c", "start", "", OUT] : [OUT];
