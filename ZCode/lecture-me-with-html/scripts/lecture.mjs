@@ -1,0 +1,270 @@
+#!/usr/bin/env node
+// lecture-me-with-html — paged lecture builder
+// 解析逐页 lecture 源稿 → KaTeX 服务端渲染数学 → 组装进翻页模板。
+// 设计血统:book-distiller 阅读器 tokens;数学离线(字体内联)。
+// 用法: node lecture.mjs build lecture.md -o out.html [--lint-only] [--no-open]
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join, resolve, basename } from "node:path";
+import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const req = createRequire(import.meta.url);
+
+/* ---------- args ---------- */
+const args = process.argv.slice(2);
+const cmd = args[0];
+const flag = (f) => args.includes(f);
+const argOf = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
+if (cmd !== "build" || !args[1]) {
+  console.log("用法: lecture.mjs build <lecture.md> [-o out.html] [--lint-only] [--no-open]");
+  process.exit(cmd === "help" ? 0 : 1);
+}
+const SRC = resolve(args[1]);
+const OUT = resolve(argOf("-o") || basename(SRC).replace(/\.md$/i, ".html"));
+
+/* ---------- katex (optional, degrade gracefully) ---------- */
+function loadKatex() {
+  const tries = [() => req("katex"), () => req(join(process.cwd(), "node_modules", "katex")),
+    () => req(join(SCRIPT_DIR, "node_modules", "katex"))];
+  for (const t of tries) { try { return t(); } catch (_) {} }
+  return null;
+}
+const KATEX = loadKatex();
+
+/* ---------- source ---------- */
+const raw = readFileSync(SRC, "utf8").replace(/\r\n/g, "\n");
+
+/* frontmatter (simple key: value + one nesting level) */
+let meta = { title: "Lecture", subtitle: "", date: "", learner: {} };
+let body = raw;
+const fm = raw.match(/^---\n([\s\S]*?)\n---\n/);
+if (fm) {
+  body = raw.slice(fm[0].length);
+  let lastKey = null;
+  for (const line of fm[1].split("\n")) {
+    const m = line.match(/^(\w+):\s*(.*)$/);
+    const sub = line.match(/^\s+(\w+):\s*(.*)$/);
+    if (m) { if (m[1] === "learner") { meta.learner = {}; lastKey = "learner"; } else { meta[m[1]] = m[2].trim(); lastKey = null; } }
+    else if (sub && lastKey === "learner") meta.learner[sub[1]] = sub[2].trim();
+  }
+}
+
+/* bib block: global source registry */
+const BIB = {};
+const bibRe = /```bib\n([\s\S]*?)```/g; let bm;
+while ((bm = bibRe.exec(body))) {
+  for (const line of bm[1].split("\n")) {
+    const m = line.match(/^\s*(S\d+)\s*:\s*\[([^\]]+)\]\((\S+)\)\s*(?:—|-)\s*(.*)$/);
+    if (m) BIB[m[1]] = { id: m[1], title: m[2], url: m[3], meta: m[4] };
+  }
+}
+body = body.replace(/```bib\n[\s\S]*?```\n?/g, "");
+
+/* ---------- pages ---------- */
+const pageRe = /^## (P\d+)[\s·:.\-—]+(.+)$/gm;
+const marks = []; let pm;
+while ((pm = pageRe.exec(body))) marks.push({ id: pm[1], title: pm[2].trim(), start: pm.index + pm[0].length, head: pm.index });
+const pages = marks.map((mk, i) => ({
+  id: mk.id, title: mk.title,
+  md: body.slice(mk.start, i + 1 < marks.length ? marks[i + 1].head : body.length).trim()
+}));
+
+/* ---------- lint ---------- */
+const BANNED = [/显然可得/g, /显然有/g, /易得/g, /经过简单计算/g, /不难看出/g, /它是显然/g,
+  /it\s+is\s+obvious/gi, /after\s+some\s+algebra/gi, /it\s+can\s+be\s+shown/gi, /trivially/gi];
+let warnings = [], errors = [];
+const expectNum = (i) => "P" + String(i + 1).padStart(2, "0");
+pages.forEach((p, i) => {
+  if (p.id !== expectNum(i)) errors.push(`页码断档:第 ${i + 1} 页是 ${p.id},应为 ${expectNum(i)}`);
+  for (const b of BANNED) if (b.test(p.md)) errors.push(`${p.id} 含数学瞬移用语(/${b.source}/)`);
+  if (!/```sources/.test(p.md)) warnings.push(`${p.id} 无 sources 块(该页结论无来源锚)`);
+});
+if (!BIB || Object.keys(BIB).length === 0) warnings.push("缺少 bib 全局来源清单");
+if (!pages.some(p => /```quiz/.test(p.md))) warnings.push("全文无 quiz 测验块");
+if (pages.length === 0) errors.push("没有找到任何页面(需要 ## P01 · 标题 格式)");
+
+/* ---------- markdown-lite + math ---------- */
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function renderMath(tex, display) {
+  if (!KATEX) return `<code class="math-fallback">${esc(tex)}</code>`;
+  try {
+    return KATEX.renderToString(tex, { displayMode: display, throwOnError: false, output: "html", strict: false });
+  } catch (e) {
+    errors.push(`KaTeX 渲染失败: ${e.message.slice(0, 120)} — "${tex.slice(0, 60)}"`);
+    return `<code class="math-fallback">${esc(tex)}</code>`;
+  }
+}
+function mathPass(md) {
+  const store = []; 
+  md = md.replace(/\$\$([\s\S]+?)\$\$/g, (_, t) => { store.push(renderMath(t.trim(), true)); return "\x00D" + (store.length - 1) + "\x00"; });
+  md = md.replace(/\$([^$\n]+?)\$/g, (_, t) => { store.push(renderMath(t.trim(), false)); return "\x00I" + (store.length - 1) + "\x00"; });
+  return { md, store };
+}
+function inline(s) {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function mdToHtml(md) {
+  const { md: m0, store } = mathPass(md);
+  const lines = esc(m0).split("\n");
+  let out = [], i = 0;
+  const flushP = (buf) => { if (buf.length) out.push("<p>" + buf.map(inline).join("<br>") + "</p>"); };
+  let buf = [];
+  while (i < lines.length) {
+    const L = lines[i];
+    if (/^\s*$/.test(L)) { flushP(buf); buf = []; i++; continue; }
+    if (/^### /.test(L)) { flushP(buf); buf = []; out.push("<h2>" + inline(L.slice(4)) + "</h2>"); i++; continue; }
+    if (/^-{3,}$/.test(L.trim())) { flushP(buf); buf = []; out.push("<hr>"); i++; continue; }
+    if (/^&gt; /.test(L)) { const q = []; while (i < lines.length && /^&gt; /.test(lines[i])) { q.push(lines[i].slice(5)); i++; } out.push("<blockquote>" + q.map(inline).join("<br>") + "</blockquote>"); continue; }
+    if (/^\|/.test(L)) {
+      const rows = []; while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = (r) => r.split("|").slice(1, -1).map(c => c.trim());
+      if (rows.length > 1 && /^[\s|:\-]+$/.test(rows[1])) {
+        let t = "<table><thead><tr>" + cells(rows[0]).map(c => "<th>" + inline(c) + "</th>").join("") + "</tr></thead><tbody>";
+        for (const r of rows.slice(2)) t += "<tr>" + cells(r).map(c => "<td>" + inline(c) + "</td>").join("") + "</tr>";
+        out.push(t + "</tbody></table>");
+      } else out.push("<p>" + inline(rows.join(" ")) + "</p>");
+      continue;
+    }
+    if (/^[-*] /.test(L)) {
+      const items = []; while (i < lines.length && /^[-*] /.test(lines[i])) { items.push(lines[i].slice(2)); i++; }
+      out.push("<ul>" + items.map(x => "<li>" + inline(x) + "</li>").join("") + "</ul>"); continue;
+    }
+    if (/^\d+\. /.test(L)) {
+      const items = []; while (i < lines.length && /^\d+\. /.test(lines[i])) { items.push(lines[i].replace(/^\d+\. /, "")); i++; }
+      out.push("<ol>" + items.map(x => "<li>" + inline(x) + "</li>").join("") + "</ol>"); continue;
+    }
+    buf.push(L); i++;
+  }
+  flushP(buf);
+  let html = out.join("\n");
+  html = html.replace(/\x00([DI])(\d+)\x00/g, (_, k, n) => store[+n]);
+  return html;
+}
+function parseQuiz(blk, pid, n) {
+  const lines = blk.split("\n").map(x => x.trim()).filter(Boolean);
+  const q = []; const opts = []; let fb = [];
+  let mode = "q";
+  for (const L of lines) {
+    if (L.startsWith("??")) { mode = "fb"; fb.push(L.replace(/^\?\?\s*/, "")); continue; }
+    if (/^-\s\[x\]\s/.test(L)) { opts.push({ t: L.replace(/^-\s\[x\]\s/, ""), ok: true }); mode = "opts"; continue; }
+    if (/^-\s/.test(L)) { opts.push({ t: L.replace(/^-\s/, ""), ok: false }); mode = "opts"; continue; }
+    (mode === "fb" ? fb : q).push(L);
+  }
+  let h = `<div class="quiz"><span class="qtag">SELF TEST · ${pid} · Q${n}</span><span>${esc(q.join(" "))}</span>`;
+  if (opts.length) for (const o of opts) h += `<button${o.ok ? ' data-ok="1"' : ""}>${esc(o.t)}</button>`;
+  else h += `<button data-reveal="1">查看参考答案</button>`;
+  h += `<span class="fb">${esc(fb.join("\n"))}</span></div>`;
+  return h;
+}
+function parseSources(blk) {
+  const ids = blk.split(/[\s,]+/).map(x => x.trim()).filter(x => /^S\d+$/.test(x));
+  let h = `<div class="srcs"><span class="lbl">SOURCES</span>`;
+  for (const id of ids) {
+    const s = BIB[id];
+    h += s ? `<a href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(s.title)} — ${esc(s.meta)}">${id}</a>`
+           : `<span>${id}(未在 bib 中登记)</span>`;
+  }
+  return h + `</div>`;
+}
+
+/* ---------- page assembly ---------- */
+const pagesHtml = pages.map((p, i) => {
+  let md = p.md;
+  /* fenced extensions */
+  const fence = /```(sources|quiz|capsule|lab|bib|callout)([^\n]*)\n([\s\S]*?)```/g;
+  const slots = [];
+  md = md.replace(fence, (_, kind, info, blk) => {
+    const ph = "\x00F" + slots.length + "\x00"; slots.push({ kind, info: info.trim(), blk }); return ph;
+  });
+  let html = mdToHtml(md);
+  let qn = 0;
+  for (const s of slots) {
+    let rep = "";
+    if (s.kind === "sources") rep = parseSources(s.blk);
+    else if (s.kind === "quiz") rep = parseQuiz(s.blk, p.id, ++qn);
+    else if (s.kind === "lab") rep = `<div class="lab">${s.blk}</div>`;
+    else if (s.kind === "capsule") rep = `<div class="capsule"><span class="ctag">PREREQUISITE CAPSULE · ${esc(s.info || "K")}</span>${mdToHtml(s.blk)}</div>`;
+    else if (s.kind === "callout") rep = `<div class="callout"><b>${esc(s.info)}</b>${mdToHtml(s.blk)}</div>`;
+    else if (s.kind === "bib") rep = "";
+    html = html.replace("\x00F" + slots.indexOf(s) + "\x00", rep);
+  }
+  const num = String(i + 1).padStart(2, "0");
+  return `<section class="page" data-id="${p.id}" data-foot="${esc(p.title)}">` +
+    `<div class="sheet"><div class="kicker">PAGE ${num} / ${String(pages.length).padStart(2, "0")} · ${p.id}</div>` +
+    `<h1 class="pt">${esc(p.title)}</h1>${html}</div></section>`;
+}).join("\n");
+
+const tocHtml = pages.map((p, i) =>
+  `<button class="tocitem" data-i="${i}"><span class="n">${p.id}</span>${esc(p.title)}</button>`).join("\n");
+const tierOf = (m) => (m.meta.match(/tier\s*A|权威|原始|教材|review|论文|官方/i) ? "Tier A · 原始与权威"
+  : /tier\s*B|OCW|lecture notes|大学/i.test(m.meta) ? "Tier B · 大学教学资料"
+  : /tier\s*C|直觉|3Blue|教学网站/i.test(m.meta) ? "Tier C · 优质直觉资源"
+  : /tier\s*D|COMSOL|ANSYS|QuantumATK|MathWorks|Intel|TSMC|Synopsys|产业|软件/i.test(m.meta) ? "Tier D · 工程与产业"
+  : /tier\s*E|SE\b|Reddit|社区|stack/i.test(m.meta) ? "Tier E · 社区讨论" : "其他来源");
+const tierOrder = ["Tier A · 原始与权威", "Tier B · 大学教学资料", "Tier C · 优质直觉资源", "Tier D · 工程与产业", "Tier E · 社区讨论", "其他来源"];
+const srcHtml = tierOrder.map(t => {
+  const items = Object.values(BIB).filter(s => tierOf(s) === t);
+  if (!items.length) return "";
+  return `<div class="srcgroup">${t}</div>` + items.map(s =>
+    `<div class="srcitem"><span class="sid">${s.id}</span><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a> — ${esc(s.meta)}</div>`).join("");
+}).join("\n");
+
+/* ---------- math css inline (fonts as data uri) ---------- */
+function mathCss() {
+  if (!KATEX) return "";
+  try {
+    const dist = dirname(req.resolve("katex/dist/katex.min.css"));
+    let css = readFileSync(join(dist, "katex.min.css"), "utf8");
+    const FONTS = ["Main-Regular","Main-Italic","Main-Bold","Main-BoldItalic","Math-Italic","Math-BoldItalic",
+      "AMS-Regular","Size1-Regular","Size2-Regular","Size3-Regular","Size4-Regular",
+      "SansSerif-Regular","SansSerif-Italic","SansSerif-Bold","Script-Regular","Caligraphic-Regular","Typewriter-Regular"];
+    css = css.replace(/url\(fonts\/KaTeX_([\w-]+)\.woff2\)/g, (_, f) => {
+      const p = join(dist, "fonts", `KaTeX_${f}.woff2`);
+      if (!FONTS.includes(f) || !existsSync(p)) return "url(data:,)";
+      return `url(data:font/woff2;base64,${readFileSync(p).toString("base64")})`;
+    });
+    return css;
+  } catch (e) { warnings.push("KaTeX CSS 内联失败: " + e.message.slice(0, 80)); return ""; }
+}
+
+/* ---------- assemble ---------- */
+const template = readFileSync(join(SCRIPT_DIR, "..", "assets", "lecture-template.html"), "utf8");
+const learner = meta.learner || {};
+const LBL = { math_level: "数学", physics_level: "物理", domain_level: "领域" };
+const learnerTxt = Object.entries(learner).map(([k, v]) => (LBL[k] || k) + ": " + v).join(" · ");
+const html = template
+  .replaceAll("{{TITLE}}", esc(meta.title || "Lecture"))
+  .replace("{{SUBTITLE}}", esc((meta.subtitle || "") + (learnerTxt ? " · " + learnerTxt : "")))
+  .replace("{{TOTAL}}", String(pages.length).padStart(2, "0"))
+  .replace("{{FOOTTITLE}}", esc(pages[0] ? pages[0].title : ""))
+  .replace("{{PAGES}}", pagesHtml)
+  .replace("{{TOC}}", tocHtml)
+  .replace("{{ALLSOURCES}}", srcHtml)
+  .replace("{{MATH_CSS}}", mathCss())
+  .replace("{{KEYJSON}}", JSON.stringify({ page: "lecture:" + (meta.title || "x") + ":page", mode: "lecture:" + (meta.title || "x") + ":mode" }));
+
+/* ---------- report ---------- */
+for (const w of warnings) console.log(`⚠ ${w}`);
+if (errors.length) {
+  for (const e of errors) console.error(`✗ ${e}`);
+  console.error(`✗ lint 未通过(${errors.length} 个错误,${warnings.length} 个警告),不写文件。`);
+  process.exit(1);
+}
+if (flag("--lint-only")) { console.log(`✓ lint 通过:${pages.length} 页,${warnings.length} 个警告`); process.exit(0); }
+mkdirSync(dirname(OUT), { recursive: true });
+writeFileSync(OUT, html);
+const kb = Math.round(html.length / 1024);
+console.log(`✓ ${OUT}`);
+console.log(`  ${pages.length} 页 · ${kb} KB · 数学:${KATEX ? "KaTeX 服务端渲染(离线)" : "降级为等宽块(未安装 katex)"}`);
+if (!flag("--no-open")) {
+  try { const start = process.platform === "win32" ? "cmd" : "open";
+    const a = process.platform === "win32" ? ["/c", "start", "", OUT] : [OUT];
+    execSync(`${start} ${a.map(x => `"${x}"`).join(" ")}`, { stdio: "ignore", shell: false });
+  } catch (_) {}
+}
