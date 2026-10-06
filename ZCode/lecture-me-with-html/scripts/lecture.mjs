@@ -63,11 +63,24 @@ while ((bm = bibRe.exec(body))) {
 body = body.replace(/```bib\n[\s\S]*?```\n?/g, "");
 
 /* ---------- pages ---------- */
-const pageRe = /^## (P\d+)[\s·:.\-—]+(.+)$/gm;
+const pageRe = /^## (P\d+)([^\n]*)$/gm;
 const marks = []; let pm;
-while ((pm = pageRe.exec(body))) marks.push({ id: pm[1], title: pm[2].trim(), start: pm.index + pm[0].length, head: pm.index });
+while ((pm = pageRe.exec(body))) {
+  let rest = pm[2];
+  const om = rest.match(/\{([^}]*)\}\s*$/);
+  const opts = {};
+  if (om) {
+    rest = rest.slice(0, om.index).trim();
+    for (const kv of om[1].split(/\s+/)) {
+      const [k, v] = kv.split("=");
+      if (k) opts[k.trim()] = (v || "true").trim();
+    }
+  }
+  const title = rest.replace(/^[\s·:.\-—]+/, "").trim();
+  marks.push({ id: pm[1], title, opts, start: pm.index + pm[0].length, head: pm.index });
+}
 const pages = marks.map((mk, i) => ({
-  id: mk.id, title: mk.title,
+  id: mk.id, title: mk.title, opts: mk.opts,
   md: body.slice(mk.start, i + 1 < marks.length ? marks[i + 1].head : body.length).trim()
 }));
 
@@ -83,10 +96,43 @@ pages.forEach((p, i) => {
 });
 if (!BIB || Object.keys(BIB).length === 0) warnings.push("缺少 bib 全局来源清单");
 if (!pages.some(p => /```quiz/.test(p.md))) warnings.push("全文无 quiz 测验块");
+/* visual-layer lint:theater 文字量 / 核心链视觉 / 对象连续性 */
+const cjk = (s) => (s.match(/[\u4e00-\u9fff]/g) || []).length;
+for (const p of pages) {
+  if (p.opts && (p.opts.mode === "theater" || p.opts.mode === "derive")) {
+    const prose = p.md.split("```")[0] || "";
+    if (cjk(prose) > 120) warnings.push(`${p.id} mode=${p.opts.mode} 首屏正文 ${cjk(prose)} 字(建议 ≤120):把严谨内容挪进 \`\`\`notes\`\`\``);
+  }
+}
+const coreChain = pages.slice(0, Math.min(11, pages.length));
+for (const p of coreChain) {
+  if (!/```(scene|visual|svg|lab)/.test(p.md))
+    warnings.push(`${p.id} 属于核心教学链(P01–P11)但没有 scene/visual/lab`);
+}
+{
+  const objPage = new Map();
+  for (const p of pages) {
+    const objs = (p.opts && p.opts.objects ? p.opts.objects.split(",") : []);
+    if (!objs.length) continue;
+    const svgText = [...p.md.matchAll(/<svg[\s\S]*?<\/svg>/g)].map(m => m[0]).join("");
+    for (const o of objs) {
+      if (!svgText.includes(`data-obj="${o.trim()}"`))
+        warnings.push(`${p.id} 声明 objects 含 ${o.trim()},但其 SVG 中没有 data-obj="${o.trim()}"`);
+    }
+    objPage.set(p.id, objs.map(x => x.trim()));
+  }
+  for (const p of pages) {
+    const inh = p.opts && p.opts.inherits;
+    if (!inh || !objPage.has(inh)) continue;
+    const shared = (objPage.get(inh) || []).filter(o => (p.opts.objects || "").includes(o));
+    if (!shared.length)
+      warnings.push(`${p.id} inherits=${inh},但与它没有任何共同延续对象(视觉连续性断裂)`);
+  }
+}
 if (pages.length === 0) errors.push("没有找到任何页面(需要 ## P01 · 标题 格式)");
 
 /* ---------- markdown-lite + math ---------- */
-const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 function renderMath(tex, display) {
   if (!KATEX) return `<code class="math-fallback">${esc(tex)}</code>`;
   try {
@@ -120,8 +166,9 @@ function mdToHtml(md) {
     if (/^\s*$/.test(L)) { flushP(buf); buf = []; i++; continue; }
     if (/^### /.test(L)) { flushP(buf); buf = []; out.push("<h2>" + inline(L.slice(4)) + "</h2>"); i++; continue; }
     if (/^-{3,}$/.test(L.trim())) { flushP(buf); buf = []; out.push("<hr>"); i++; continue; }
-    if (/^&gt; /.test(L)) { const q = []; while (i < lines.length && /^&gt; /.test(lines[i])) { q.push(lines[i].slice(5)); i++; } out.push("<blockquote>" + q.map(inline).join("<br>") + "</blockquote>"); continue; }
+    if (/^&gt; /.test(L)) { flushP(buf); buf = []; const q = []; while (i < lines.length && /^&gt; /.test(lines[i])) { q.push(lines[i].slice(5)); i++; } out.push("<blockquote>" + q.map(inline).join("<br>") + "</blockquote>"); continue; }
     if (/^\|/.test(L)) {
+      flushP(buf); buf = [];
       const rows = []; while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i++; }
       const cells = (r) => r.split("|").slice(1, -1).map(c => c.trim());
       if (rows.length > 1 && /^[\s|:\-]+$/.test(rows[1])) {
@@ -132,10 +179,12 @@ function mdToHtml(md) {
       continue;
     }
     if (/^[-*] /.test(L)) {
+      flushP(buf); buf = [];
       const items = []; while (i < lines.length && /^[-*] /.test(lines[i])) { items.push(lines[i].slice(2)); i++; }
       out.push("<ul>" + items.map(x => "<li>" + inline(x) + "</li>").join("") + "</ul>"); continue;
     }
     if (/^\d+\. /.test(L)) {
+      flushP(buf); buf = [];
       const items = []; while (i < lines.length && /^\d+\. /.test(lines[i])) { items.push(lines[i].replace(/^\d+\. /, "")); i++; }
       out.push("<ol>" + items.map(x => "<li>" + inline(x) + "</li>").join("") + "</ol>"); continue;
     }
@@ -172,12 +221,36 @@ function parseSources(blk) {
   }
   return h + `</div>`;
 }
+/* scene:SVG(含 data-beat 分组)+ <bN>旁白</bN> → 可逐拍推进的剧场 */
+function parseScene(blk) {
+  const caps = [...blk.matchAll(/<b(\d+)>([\s\S]*?)<\/b\1>/g)].map(m => ({ n: +m[1], t: m[2].trim() }));
+  const svgs = [...blk.matchAll(/<svg[\s\S]*?<\/svg>/g)].map(m => m[0]).join("\n");
+  let beats = 0;
+  for (const m of svgs.matchAll(/data-beat="(\d+)"/g)) beats = Math.max(beats, +m[1]);
+  for (const c of caps) beats = Math.max(beats, c.n);
+  const cap = {};
+  caps.forEach(c => cap[c.n] = c.t);
+  let capHtml = "";
+  for (let k = 1; k <= beats; k++) {
+    let t = cap[k] !== undefined
+      ? esc(cap[k]).replace(/\$([^$\n]+?)\$/g, (_, tex) => renderMath(tex, false))
+      : "\u00a0";
+    capHtml += `<span class="bcap" data-b="${k}">${t}</span>`;
+  }
+  return `<div class="scene" data-beats="${beats}">` +
+    `<div class="capbar"><span class="bcount">BEAT 1/${beats} · 点击或按 → 继续</span>${capHtml}</div>` +
+    `<div class="stage">${svgs}</div></div>`;
+}
+function parseNotes(blk) {
+  return `<div class="notes"><div class="ntag">NOTES · 严谨层(方程/假设/来源细节,点开看)</div>` +
+    `<div class="nbody">${mdToHtml(blk)}</div></div>`;
+}
 
 /* ---------- page assembly ---------- */
 const pagesHtml = pages.map((p, i) => {
   let md = p.md;
   /* fenced extensions */
-  const fence = /```(sources|quiz|capsule|lab|bib|callout|visual|svg)([^\n]*)\n([\s\S]*?)```/g;
+  const fence = /```(sources|quiz|capsule|lab|bib|callout|visual|svg|scene|notes|predict)([^\n]*)\n([\s\S]*?)```/g;
   const slots = [];
   md = md.replace(fence, (_, kind, info, blk) => {
     const ph = "\x00F" + slots.length + "\x00"; slots.push({ kind, info: info.trim(), blk }); return ph;
@@ -192,12 +265,20 @@ const pagesHtml = pages.map((p, i) => {
     else if (s.kind === "capsule") rep = `<div class="capsule"><span class="ctag">PREREQUISITE CAPSULE · ${esc(s.info || "K")}</span>${mdToHtml(s.blk)}</div>`;
     else if (s.kind === "callout") rep = `<div class="callout"><b>${esc(s.info)}</b>${mdToHtml(s.blk)}</div>`;
     else if (s.kind === "visual" || s.kind === "svg") rep = `<div class="visual">${s.blk}</div>`;
+    else if (s.kind === "scene") rep = parseScene(s.blk);
+    else if (s.kind === "notes") rep = parseNotes(s.blk);
+    else if (s.kind === "predict") { const q = parseQuiz(s.blk, p.id, ++qn); rep = q.replace('class="quiz"', 'class="quiz predict"').replace(/SELF TEST/, "PREDICT · 先猜再看"); }
     else if (s.kind === "bib") rep = "";
     html = html.replace("\x00F" + slots.indexOf(s) + "\x00", rep);
   }
   const num = String(i + 1).padStart(2, "0");
-  return `<section class="page" data-id="${p.id}" data-foot="${esc(p.title)}">` +
-    `<div class="sheet"><div class="kicker">PAGE ${num} / ${String(pages.length).padStart(2, "0")} · ${p.id}</div>` +
+  const o = p.opts || {};
+  return `<section class="page" data-id="${p.id}" data-foot="${esc(p.title)}"` +
+    (o.mode ? ` data-mode="${esc(o.mode)}"` : "") +
+    (o.objects ? ` data-objects="${esc(o.objects)}"` : "") +
+    (o.inherits ? ` data-inherits="${esc(o.inherits)}"` : "") + `>` +
+    `<div class="sheet"><div class="kicker">PAGE ${num} / ${String(pages.length).padStart(2, "0")} · ${p.id}` +
+    (o.mode ? ` · ${esc(o.mode).toUpperCase()}` : "") + `</div>` +
     `<h1 class="pt">${esc(p.title)}</h1>${html}</div></section>`;
 }).join("\n");
 
@@ -248,7 +329,7 @@ const html = template
   .replace("{{TOC}}", tocHtml)
   .replace("{{ALLSOURCES}}", srcHtml)
   .replace("{{MATH_CSS}}", mathCss())
-  .replace("{{KEYJSON}}", JSON.stringify({ page: "lecture:" + (meta.title || "x") + ":page", mode: "lecture:" + (meta.title || "x") + ":mode" }));
+  .replace("{{KEYJSON}}", JSON.stringify({ page: "lecture:" + (meta.title || "x") + ":page", mode: "lecture:" + (meta.title || "x") + ":mode", beat: "lecture:" + (meta.title || "x") + ":beats" }));
 
 /* ---------- dossier audit (--dossier) ---------- */
 const DOSSIER = argOf("--dossier");
@@ -317,6 +398,22 @@ if (DOSSIER) {
 }
 
 /* ---------- report ---------- */
+function statLine() {
+  const n = (re) => pages.reduce((a, p) => a + (p.md.match(re) || []).length, 0);
+  const scenes = n(/```scene/g);
+  const totalBeats = pages.reduce((a, p) => {
+    let b = 0;
+    for (const sm of p.md.matchAll(/```scene[^\n]*\n([\s\S]*?)```/g)) {
+      let mx = 0; for (const m of sm[1].matchAll(/data-beat="(\d+)"/g)) mx = Math.max(mx, +m[1]);
+      for (const m of sm[1].matchAll(/<b(\d+)>/g)) mx = Math.max(mx, +m[1]);
+      b += mx;
+    }
+    return a + b;
+  }, 0);
+  return `pages=${pages.length} bibSources=${Object.keys(BIB).length} claims=${DOSSIER ? claims.size : "n/a"} ` +
+    `quiz=${n(/```quiz/g)} predict=${n(/```predict/g)} scenes=${scenes} beats≈${totalBeats} ` +
+    `visual=${n(/```(?:visual|svg)/g)} labs=${n(/```lab/g)} notes=${n(/```notes/g)}`;
+}
 for (const w of warnings) console.log(`⚠ ${w}`);
 if (errors.length) {
   for (const e of errors) console.error(`✗ ${e}`);
@@ -324,17 +421,14 @@ if (errors.length) {
   process.exit(1);
 }
 if (flag("--lint-only")) {
-  const nQuiz = pages.reduce((a, p) => a + (p.md.match(/```quiz/g) || []).length, 0);
-  console.log(`✓ lint 通过:pages=${pages.length} bibSources=${Object.keys(BIB).length} claims=${DOSSIER ? claims.size : "n/a"} quiz=${nQuiz} warnings=${warnings.length}`);
+  console.log(`✓ lint 通过:${statLine()} warnings=${warnings.length}`);
   process.exit(0);
 }
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, html);
 const kb = Math.round(html.length / 1024);
 console.log(`✓ ${OUT}`);
-const nQuiz = pages.reduce((a, p) => a + (p.md.match(/```quiz/g) || []).length, 0);
-const nVis = pages.reduce((a, p) => a + (p.md.match(/```(?:visual|svg)/g) || []).length, 0);
-console.log(`  pages=${pages.length} bibSources=${Object.keys(BIB).length} claims=${DOSSIER ? claims.size : "n/a"} quiz=${nQuiz} visual=${nVis} labs=${pages.reduce((a,p)=>a+(p.md.match(/```lab/g)||[]).length,0)} · ${kb} KB · 数学:${KATEX ? "KaTeX 服务端渲染(离线)" : "降级为等宽块(未安装 katex)"}`);
+console.log(`  ${statLine()} · ${kb} KB · 数学:${KATEX ? "KaTeX 服务端渲染(离线)" : "降级为等宽块(未安装 katex)"}`);
 if (!flag("--no-open")) {
   try { const start = process.platform === "win32" ? "cmd" : "open";
     const a = process.platform === "win32" ? ["/c", "start", "", OUT] : [OUT];

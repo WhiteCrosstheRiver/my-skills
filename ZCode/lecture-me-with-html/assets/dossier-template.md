@@ -45,6 +45,22 @@ lecture_file: lecture.md
 
 - 对象配色:源=橙、响应=蓝、单位冲击=黄(示例;跨页保持)
 
+### Visual Object Registry(跨页持久对象)
+
+```yaml
+visual_objects:
+  source:   { color: 橙, symbol: f/δ, position: 左/输入 }
+  system:   { color: 灰, symbol: L/A, position: 中 }
+  response: { color: 蓝, symbol: u,   position: 右/输出 }
+  # 按主题增删;SVG 里用 data-obj="source" 标注,页头 objects= 声明延续
+```
+
+### Visual Storyboard(先分镜,后写稿)
+
+| Scene | Question | Persistent objects | Beat change | Formula born | Prediction |
+|---|---|---|---|---|---|
+| S01 |  |  |  |  | yes/no |
+
 ## 4. Prerequisites(前置知识清单)
 
 - 线性、叠加、矩阵逆、δ 函数、傅里叶……

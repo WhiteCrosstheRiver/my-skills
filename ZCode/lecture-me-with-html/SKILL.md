@@ -20,7 +20,7 @@ description: 重型教学器:把一个概念做成一本可翻页、可推导、
 ## 流水线(必须按顺序,不许跳步)
 
 ```
-0 摸底 → 1 研究 → 2 证据账本 → 3 概念图 → 4 教学架构 → 5 写稿 → 6 构建 → 7 验证 → 8 交付
+0 摸底 → 1 研究 → 2 证据账本 → 3 概念图 → 4 教学架构 → 5 VISUAL STORYBOARD → 6 写稿 → 7 构建 → 8 验证 → 9 交付
 ```
 
 ### 0. 摸底(不单独开轮次)
@@ -64,47 +64,53 @@ C017 | L G = δ(线性算符 + 指定边界条件) | definition
 
 ### 4. 写稿(lecture.md)
 
-格式:`## P07 · 标题` 开页;`$$…$$` 数学;```sources``` 页面来源;
-```quiz``` 测验;```capsule 标题``` 前置胶囊;```lab``` 交互模拟(原生 HTML/JS)。
+页面格式:`## P07 · 标题 {mode=theater objects=source,system,response inherits=P02}` 开页。
+模式:`theater`(大图+一句旁白)/`derive`(图+公式同步)/`read`(默认纸面)。
+块:```scene```(逐拍 SVG:组内 `data-beat="N"` 分拍,`data-fx="grow|slide"` 变换,
+旁白写 `<bN>一句话</bN>`,持久对象标 `data-obj="source|response|delta|kernel|system"`);
+```predict```(Prediction→Reveal,先猜再看);```notes```(严谨层:方程/假设/证明细节,
+默认折叠);```sources```;```quiz```;```capsule 标题```;```lab```(参数交互);
+```callout 标题```;```visual```(静态 SVG)。
+
+**Scene→Beat 铁律**:`→` 先推进当前页的拍,拍放尽才翻页。
+一个 scene 只讲一个认知动作的分解,3–7 拍;旁白一句 ≤30 字。
+持久对象跨页不换画法:source 橙、response 蓝、δ 金、kernel 深蓝、operator 灰
+(registry 记在 dossier),位置语义固定:源在左/输入位,算符在中,响应在右。
+
+**Storyboard 先行**:动笔前先填 dossier 的 Visual Storyboard 表
+(Scene | Question | Persistent objects | Beat change | Formula born | Prediction),
+先设计分镜再写正文,禁止"先写文章再找地方插图"。
+
 写作纪律(全部来自 spec,逐条执行):
 
-- **不以定义开场。** 先回答"这东西为什么被发明?没有它什么算不了?"
+- **不以定义开场。** 第 1 页给 Hero Phenomenon(令人惊讶的具体现象 + 一个问题)。
 - **Teaching Compiler 顺序**:WHY → CONCRETE PROBLEM → INTUITION → VISUAL MODEL →
   PATTERN → FORMAL DEFINITION → FORMULA → DERIVATION → WORKED EXAMPLE →
   GENERALIZATION → CONNECTION → APPLICATION → LIMITATION。
 - **Formula Anatomy**:重要公式首现必拆——每个符号是什么/输入输出/量纲/正负号/
   变量与参数/假设/参数增大与极限行为。只给公式 = 不合格。
 - **禁止数学瞬移**:不得出现"显然可得/经过简单计算/it is obvious/after some algebra"。
-  每步推导给出"为什么/用了什么假设/物理上意味着什么"。
 - **公式验证**:量纲、符号、极限、特例、数值 sanity,结果记入 dossier 验证日志。
-  用 python/node 算,不凭感觉。
-- **Example Ladder**:toy → worked → scientific → engineering → industrial → research,
-  按主题适配,不强凑六层。
-- **Generalization**:每次抽象说明"什么变了/什么没变/核心结构是什么"。
-- **Connection Map**:相邻概念(impulse response/matrix inverse/propagator/…)必须解释
-  为什么相关,不许罗列名字。
-- **限制与失效**:假设、失效条件、近似边界、常见误用,必须讲。
-- **Science→Engineering→Industry**:给具体链条(理论→方法→软件→产品),
-  禁止"广泛应用于工业"这类空话。
-- **Frontier**:活跃主题检索近三年来源;经典结论与最新研究明确区分。
-- 语言执行 ste-speech 的 clarity layer(一句一事、短句、术语稳定);
-  Simple language ≠ simple science,专业词照用,但一个符号一个含义。
-- 可视化按知识形状选型(见 **references/visualization-policy.md**),
-  每张图必须回答"它帮用户理解什么",答不出就删。
-- 交互只用于回答"参数变了会怎样",定义页不塞滑块。
-- 3B1B 借鉴的是教学动作:progressive reveal、visual continuity、formula emergence、
-  transformation 对应。不是模仿视觉风格。
+- **Example Ladder** / **Generalization 三问** / **Connection Map** /
+  **限制与失效** / **Science→Engineering→Industry 具体链条** / **Frontier 近三年**。
+- 语言执行 ste-speech 的 clarity layer;Simple language ≠ simple science。
+- 3B1B 五行为:**Persistence + Transformation + Prediction + Emergence + Minimalism**
+  (详见 **references/visualization-policy.md**)。
+  Theater/derive 页首屏正文 ≤120 中文字,严谨内容进 notes。
 
 ### 5. 构建
 
 ```bash
-node "<skill>/scripts/lecture.mjs" build lecture.md -o out.html
+node "<skill>/scripts/lecture.mjs" build lecture.md -o out.html --dossier dossier.md
 ```
 
 需要数学排版:`npm install katex` 一次(在 lecture.md 所在目录或 skill 目录)。
 lecture.mjs 在构建期把 LaTeX 渲染成 HTML(服务端),产物零数学 JS、完全离线。
 没有 katex 也能构建(数学降级为等宽块并告警)。
-lint 会拦截:数学瞬移用语、页码断档、无来源页。规则见 **references/math-policy.md**。
+lint 拦截:数学瞬移用语、页码断档、无来源页;`--dossier` 再做证据审计
+(claim 存在性、来源登记、used-in 双向核对、置信缓和词、孤儿);
+视觉审计:核心链页必须有 scene/visual/lab,声明 objects 必须真实出现在 SVG,
+inherits 必须延续对象,theater 首屏文字 ≤120 字。
 
 ### 6. 验证与交付
 

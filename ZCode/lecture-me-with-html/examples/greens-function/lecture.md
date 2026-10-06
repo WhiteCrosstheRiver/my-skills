@@ -28,165 +28,239 @@ S19: [Intel 官方背景材料:Strained Silicon](https://www.intel.com/pressroom
 S20: [Green's Neural Operator with Neumann BC (OpenReview, 预印本)](https://openreview.net) — tier E 预印本 — 另一条神经算子线
 ```
 
-## P01 · 先别看任何方程:敲一下,会发生什么?
+## P01 · 先别看任何方程:敲一下,会发生什么? {mode=theater objects=source,response}
 
-一根绷紧的弦,两端钉死。
-你在中间用手指弹它一下,它成为一个形状:中间鼓起来,两端不动。
+```scene
+<b1>一根两端钉死的弦。先什么都不做。</b1>
+<b2>在正中间,敲一下。(橙 = 源)</b2>
+<b3>弦变成这个形状:中间鼓、两端不动。(蓝 = 响应)</b3>
+<b4>记住这张图。整门课只研究它。</b4>
+<svg viewBox="0 0 640 240" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <g data-beat="1">
+    <rect x="26" y="120" width="14" height="60" fill="var(--ink3)"/>
+    <rect x="600" y="120" width="14" height="60" fill="var(--ink3)"/>
+    <line x1="40" y1="150" x2="600" y2="150" stroke="currentColor" stroke-width="2"/>
+    <text x="60" y="200" fill="var(--ink3)" font-size="12">两端钉死</text>
+  </g>
+  <g data-beat="2" data-obj="source">
+    <circle cx="320" cy="150" r="8" fill="oklch(0.68 0.15 55)"/>
+    <path d="M 320 96 L 320 136" stroke="oklch(0.68 0.15 55)" stroke-width="3" marker-end="url(#arP1)"/>
+    <defs><marker id="arP1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.68 0.15 55)"/></marker></defs>
+    <text x="338" y="112" fill="oklch(0.68 0.15 55)" font-size="12">敲一下(单位强度)</text>
+  </g>
+  <g data-beat="3" data-obj="response" data-fx="grow">
+    <path d="M 40 150 L 320 70 L 600 150 Z" fill="oklch(0.72 0.12 250 / .18)" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
+    <text x="330" y="62" fill="oklch(0.55 0.13 250)" font-size="12">响应(蓝)</text>
+  </g>
+  <g data-beat="4">
+    <rect x="470" y="30" width="150" height="40" rx="8" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+    <text x="545" y="56" text-anchor="middle" fill="currentColor" font-size="13">=?任意载荷能预测吗</text>
+  </g>
+</svg>
+```
 
-现在换一个问题。同样的弦,不弹一下,而是压上一个**任意的**重物——形状可以很复杂。
-它的平衡形状怎么算?
+```predict
+如果只精确知道"每个位置敲一下后的响应",任意形状的重物压上去,能预测弦的形状吗?
+- 不能,重物形状有无数种,得逐个重解
+- [x] 能:任意载荷 = 无数个小敲击之和,响应直接相加
+- 只能预测对称的载荷
+?? 先带着猜往下走。P04 会证明"能",P09 会真的算一遍。猜错也没关系——猜过才记得住。
+```
 
-朴素做法:对每个重物形状,重新解一遍力学方程。麻烦在于,重物有无数种。
-
-更聪明的问法是:
-
-- 先只研究**一种**最简单的扰动:在**一个点**上,敲**一下**(单位强度)。
-- 把这个"单位敲击的响应"记录下来,记作一张表。
-- 任意重物 = 无数个小敲击的排列组合。响应能不能直接**查表相加**?
-
-这门 Lecture 的全部内容,就是把这张表讲清楚:它叫什么、怎么算、为什么合法、
-在静电、弹簧、位错应力、晶体管里分别长什么样、什么时候失效。
-
-> 历史注脚:George Green 在 1828 年私人印发了一本小册子《论数学分析在电与磁理论中的应用》,
-> "单位源响应"的思想就在里面。这本册子当时只卖出约 50 份,后来靠 Kelvin 的推动才广为人知。[C020]
+> 历史注脚:George Green 1828 年私人印发《论数学分析在电与磁理论中的应用》,
+> "单位源响应"的思想就在里面;当时只卖出约 50 份,靠 Kelvin 推动才广为人知。[C020]
 
 ```sources
 S1 S2
 ```
 
-## P02 · 最简单的问题:两个弹簧
+## P02 · 最简单的问题:两个弹簧 {mode=theater objects=system,source}
 
-微分方程先放一边。看一个**离散**的、只有两个自由度的线性系统:两个耦合的弹簧块。
-
-平衡方程写成矩阵形式 $A\,x = b$:
-
-$$A=\begin{pmatrix}3 & 1\\ 1 & 2\end{pmatrix},\qquad x=\begin{pmatrix}x_1\\ x_2\end{pmatrix},\qquad b=\begin{pmatrix}b_1\\ b_2\end{pmatrix}$$
-
-$b$ 是外力,$x$ 是位移。$A$ 描述弹簧网络:对角线是自己身上的弹簧刚度,非对角线是耦合。
-
-```visual
-<svg viewBox="0 0 640 130" style="color:var(--ink);font-family:var(--sans)" font-size="13">
-  <line x1="40" y1="60" x2="120" y2="60" stroke="var(--ink3)" stroke-width="2"/>
-  <rect x="120" y="40" width="46" height="40" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
-  <text x="143" y="65" text-anchor="middle" fill="currentColor">块1</text>
-  <path d="M 166 60 q 10 -12 20 0 q 10 12 20 0 q 10 -12 20 0 q 10 12 20 0" fill="none" stroke="oklch(0.55 0.13 250)" stroke-width="2"/>
-  <rect x="266" y="40" width="46" height="40" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
-  <text x="289" y="65" text-anchor="middle" fill="currentColor">块2</text>
-  <line x1="312" y1="60" x2="392" y2="60" stroke="var(--ink3)" stroke-width="2"/>
-  <text x="95" y="30" fill="var(--ink3)" font-size="11">墙</text>
-  <text x="420" y="65" fill="currentColor">墙</text>
-  <path d="M 143 14 L 143 34" stroke="oklch(0.68 0.15 55)" stroke-width="2.5" marker-end="url(#arP2a)"/>
-  <defs><marker id="arP2a" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-    <path d="M0,0 L8,4 L0,8 z" fill="oklch(0.68 0.15 55)"/></marker></defs>
-  <text x="118" y="12" fill="oklch(0.68 0.15 55)" font-size="12">F₁(橙 = 源)</text>
-  <text x="400" y="110" fill="var(--ink3)" font-size="12">右边的方程:每个块的受力平衡</text>
-  <text x="400" y="96" fill="var(--ink3)" font-size="12">耦合:中间弹簧把两块连起来</text>
+```scene
+<b1>把弦简化到只剩两个自由度:两个弹簧块。</b1>
+<b2>平衡方程:矩阵形式 A·x = b。A 的每个元素 = 一根弹簧。</b2>
+<b3>b 是外力(橙),x 是位移(蓝)。接下来固定 A,只换戳法,看响应。</b3>
+<svg viewBox="0 0 640 190" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <g data-beat="1" data-obj="system">
+    <rect x="30" y="70" width="14" height="60" fill="var(--ink3)"/>
+    <rect x="120" y="80" width="52" height="44" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+    <text x="146" y="107" text-anchor="middle" fill="currentColor">块1</text>
+    <path d="M 172 102 q 10 -12 20 0 q 10 12 20 0 q 10 -12 20 0 q 10 12 20 0" fill="none" stroke="oklch(0.55 0.13 250)" stroke-width="2"/>
+    <rect x="252" y="80" width="52" height="44" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+    <text x="278" y="107" text-anchor="middle" fill="currentColor">块2</text>
+    <line x1="304" y1="102" x2="384" y2="102" stroke="currentColor" stroke-width="2"/>
+    <rect x="384" y="70" width="14" height="60" fill="var(--ink3)"/>
+  </g>
+  <g data-beat="2" data-obj="system">
+    <text x="146" y="152" text-anchor="middle" fill="oklch(0.62 0.13 250)" font-size="12">A₁₁:挂墙的刚度</text>
+    <text x="238" y="152" text-anchor="middle" fill="oklch(0.62 0.13 250)" font-size="12">A₁₂:中间耦合</text>
+    <text x="480" y="60" fill="currentColor" font-size="15" font-family="var(--mono)">A·x = b</text>
+    <text x="480" y="84" fill="var(--ink3)" font-size="12">已知规则和结果,</text>
+    <text x="480" y="102" fill="var(--ink3)" font-size="12">反推位移。</text>
+  </g>
+  <g data-beat="3" data-obj="source">
+    <path d="M 146 26 L 146 72" stroke="oklch(0.68 0.15 55)" stroke-width="3" marker-end="url(#arP2)"/>
+    <path d="M 278 26 L 278 72" stroke="oklch(0.68 0.15 55)" stroke-width="3" marker-end="url(#arP2)"/>
+    <text x="162" y="20" fill="oklch(0.68 0.15 55)" font-size="12">F₁(源,橙)</text>
+    <text x="292" y="20" fill="oklch(0.68 0.15 55)" font-size="12">F₂</text>
+    <defs><marker id="arP2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.68 0.15 55)"/></marker></defs>
+  </g>
 </svg>
 ```
 
-图里每个部件对应 $A$ 的一个元素:对角线 = 各自挂在墙上的弹簧,非对角线 = 中间那根耦合弹簧。
-
-```capsule K1 · 矩阵与逆,最少必要版
+```notes
+矩阵与逆,最少必要版:
 - 矩阵 $A$ 乘向量 = 一种"线性混合"。
-- $A\,x=b$ 的意思是:已知混合规则 $A$ 和结果 $b$,反推原料 $x$。
-- 反推的机器叫逆矩阵 $A^{-1}$:$x=A^{-1}b$。它满足 $A\,A^{-1}=I$。
-- $I$ 是单位阵:乘谁都不改变谁。
+- $A\,x=b$:已知混合规则 $A$ 和结果 $b$,反推原料 $x$。
+- 反推的机器叫逆矩阵 $A^{-1}$:$x=A^{-1}b$,满足 $A\,A^{-1}=I$(单位阵,乘谁不变谁)。
+- 本例数值:$A=\begin{pmatrix}3&1\\1&2\end{pmatrix}$——对角线 3、2 = 两块挂墙刚度,非对角 1 = 中间耦合弹簧。
+本 Lecture 只需要这些;下面每一处用到,都会带着具体数字走。
 ```
-
-本 Lecture 只需要这些。不熟也没关系,下面每一处用到,都会带着具体数字走。
 
 ```sources
 S2
 ```
 
-## P03 · 把"单位敲击"记下来:矩阵逆的真面目
+## P03 · 把"单位敲击"记下来:矩阵逆的真面目 {mode=theater inherits=P02 objects=source,system,response}
 
-分别只戳一个自由度,看系统的回应。
-
-**戳第 1 块**($b=(1,0)$):解出 $x=(0.4,\,-0.2)$。
-**戳第 2 块**($b=(0,1)$):解出 $x=(-0.2,\,0.6)$。
-
-把两次响应并排摆好,拼成一个矩阵:
-
-$$A^{-1}=\frac{1}{5}\begin{pmatrix}2 & -1\\ -1 & 3\end{pmatrix}$$
-
-第一列就是"戳第 1 块的响应",第二列就是"戳第 2 块的响应"。
-**矩阵逆不是抽象符号,它就是一张"单位敲击响应表"。**
-
-```visual
-<svg viewBox="0 0 640 210" style="color:var(--ink);font-family:var(--sans)" font-size="13">
-  <text x="110" y="24" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">戳块1(b₁=1)</text>
-  <text x="110" y="40" text-anchor="middle" fill="var(--ink3)" font-size="11">响应 = A⁻¹ 第 1 列</text>
-  <line x1="40" y1="150" x2="180" y2="150" stroke="currentColor" stroke-width="2"/>
-  <circle cx="60" cy="150" r="7" fill="oklch(0.72 0.12 250)"/>
-  <circle cx="110" cy="150" r="7" fill="oklch(0.72 0.12 250)"/>
-  <path d="M 60 143 L 60 118" stroke="oklch(0.68 0.15 55)" stroke-width="2.5"/>
-  <path d="M 110 143 L 110 156" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
-  <text x="60" y="172" text-anchor="middle" fill="var(--ink3)" font-size="11">+0.4</text>
-  <text x="110" y="176" text-anchor="middle" fill="var(--ink3)" font-size="11">−0.2</text>
-  <text x="390" y="24" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">戳块2(b₂=1)</text>
-  <text x="390" y="40" text-anchor="middle" fill="var(--ink3)" font-size="11">响应 = A⁻¹ 第 2 列</text>
-  <line x1="320" y1="150" x2="460" y2="150" stroke="currentColor" stroke-width="2"/>
-  <circle cx="370" cy="150" r="7" fill="oklch(0.72 0.12 250)"/>
-  <circle cx="420" cy="150" r="7" fill="oklch(0.72 0.12 250)"/>
-  <path d="M 370 143 L 370 156" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
-  <path d="M 420 143 L 420 118" stroke="oklch(0.68 0.15 55)" stroke-width="2.5"/>
-  <text x="370" y="176" text-anchor="middle" fill="var(--ink3)" font-size="11">−0.2</text>
-  <text x="420" y="172" text-anchor="middle" fill="var(--ink3)" font-size="11">+0.6</text>
-  <text x="555" y="80" text-anchor="middle" fill="currentColor" font-size="12">并排放好 = A⁻¹</text>
-  <path d="M 480 100 L 530 80" stroke="var(--ink3)" stroke-dasharray="4 3" fill="none"/>
-  <text x="555" y="104" text-anchor="middle" fill="var(--ink3)" font-size="11">↑</text>
-  <text x="555" y="118" text-anchor="middle" fill="var(--ink3)" font-size="11">响应表</text>
+```scene
+<b1>还是这套弹簧。这次只戳第 1 块:b = (1, 0)。</b1>
+<b2>单位力出现(橙 = 源)。</b2>
+<svg viewBox="0 0 640 170" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <g data-beat="1" data-obj="system">
+    <rect x="30" y="70" width="14" height="60" fill="var(--ink3)"/>
+    <rect x="120" y="80" width="52" height="44" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+    <text x="146" y="107" text-anchor="middle" fill="currentColor">块1</text>
+    <path d="M 172 102 q 10 -12 20 0 q 10 12 20 0 q 10 -12 20 0 q 10 12 20 0" fill="none" stroke="oklch(0.55 0.13 250)" stroke-width="2"/>
+    <rect x="252" y="80" width="52" height="44" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+    <text x="278" y="107" text-anchor="middle" fill="currentColor">块2</text>
+    <line x1="304" y1="102" x2="384" y2="102" stroke="currentColor" stroke-width="2"/>
+    <rect x="384" y="70" width="14" height="60" fill="var(--ink3)"/>
+  </g>
+  <g data-beat="2" data-obj="source">
+    <path d="M 146 34 L 146 74" stroke="oklch(0.68 0.15 55)" stroke-width="3.5" marker-end="url(#arP3a)"/>
+    <text x="160" y="28" fill="oklch(0.68 0.15 55)" font-size="12">单位力 b₁ = 1</text>
+    <defs><marker id="arP3a" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.68 0.15 55)"/></marker></defs>
+  </g>
 </svg>
 ```
 
-图上的数字就是算出来的响应:橙箭头 = 你戳的位置(源,橙色),蓝 = 系统里各处的响应。
-注意一个细节:戳块 1,块 2 会被**反向**拖动(−0.2)——中间弹簧被压缩,把块 2 往回顶。
+```predict
+只戳块 1(向右推),平衡后块 2 会往哪边走?
+- → 和块 1 同向
+- 不动
+- [x] ← 反向:中间弹簧的状态把块 2 往回带
+?? 猜完看下一拍。数字会告诉你:−0.2。
+```
 
-自查(已实算,见 dossier V-03):$A\cdot A^{-1}=I$ 成立;
-$b=(1,0)$ 时 $x=(0.4,-0.2)$,与上式一致。[C003]
+```scene
+<b1>块 1 向右移动 +0.4。(蓝 = 位移)</b1>
+<b2>注意:块 2 向反方向移动 −0.2。单个数字也是一条"响应"。</b2>
+<b3>把两个响应数竖着写:这一列就是"戳块 1 的完整响应"。</b3>
+<b4>再戳第 2 块:b = (0, 1)。同一套弹簧,换一个敲法。</b4>
+<b5>两列并排,括起来——它就是 A⁻¹。矩阵逆是看着长出来的。</b5>
+<svg viewBox="0 0 640 230" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <g data-beat="1" data-obj="system">
+    <rect x="30" y="120" width="14" height="60" fill="var(--ink3)"/>
+    <rect x="120" y="130" width="52" height="44" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+    <text x="146" y="157" text-anchor="middle" fill="currentColor">块1</text>
+    <path d="M 172 152 q 10 -12 20 0 q 10 12 20 0 q 10 -12 20 0 q 10 12 20 0" fill="none" stroke="oklch(0.55 0.13 250)" stroke-width="2"/>
+    <rect x="252" y="130" width="52" height="44" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+    <text x="278" y="157" text-anchor="middle" fill="currentColor">块2</text>
+    <line x1="304" y1="152" x2="384" y2="152" stroke="currentColor" stroke-width="2"/>
+    <rect x="384" y="120" width="14" height="60" fill="var(--ink3)"/>
+  </g>
+  <g data-beat="2" data-obj="response" data-fx="growx">
+    <path d="M 120 208 L 198 208" stroke="oklch(0.72 0.12 250)" stroke-width="3" marker-end="url(#arP3b)"/>
+    <text x="159" y="226" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="12">块1 位移 +0.4</text>
+    <defs><marker id="arP3b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.72 0.12 250)"/></marker></defs>
+  </g>
+  <g data-beat="3" data-obj="response" data-fx="growx">
+    <path d="M 304 208 L 252 208" stroke="oklch(0.72 0.12 250)" stroke-width="3" marker-end="url(#arP3c)"/>
+    <text x="286" y="226" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="12">块2 位移 −0.2(反向!)</text>
+    <defs><marker id="arP3c" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.72 0.12 250)"/></marker></defs>
+  </g>
+  <g data-beat="4" data-obj="response">
+    <rect x="452" y="96" width="120" height="84" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+    <text x="512" y="126" text-anchor="middle" fill="var(--blue-ink)" font-size="14" font-family="var(--mono)">( +0.4 )</text>
+    <text x="512" y="150" text-anchor="middle" fill="var(--blue-ink)" font-size="14" font-family="var(--mono)">( −0.2 )</text>
+    <text x="512" y="172" text-anchor="middle" fill="var(--ink3)" font-size="10.5">戳块1的响应 = 一列</text>
+  </g>
+  <g data-beat="5" data-obj="source">
+    <path d="M 278 84 L 278 124" stroke="oklch(0.68 0.15 55)" stroke-width="3.5" marker-end="url(#arP3a)"/>
+    <text x="292" y="78" fill="oklch(0.68 0.15 55)" font-size="12">b₂ = 1</text>
+    <rect x="444" y="8" width="136" height="56" rx="8" fill="none" stroke="var(--amber)" stroke-dasharray="5 4"/>
+    <text x="512" y="32" text-anchor="middle" fill="oklch(0.62 0.13 60)" font-size="13" font-family="var(--mono)">A⁻¹ = [列1 | 列2]</text>
+    <text x="512" y="52" text-anchor="middle" fill="var(--ink3)" font-size="10.5">两列并排 = 响应表</text>
+  </g>
+</svg>
+```
+
+数值自查(dossier V-03,实算):$A\cdot A^{-1}=I$;$b=(1,0)$ 时 $x=(0.4,-0.2)$,与图中一致。[C003]
 
 一个像,一个坑:
 - 像:这张表只依赖系统($A$),不依赖你之后想戳什么。存一次,到处用。
-- 坑:若 $A$ 不可逆(比如某根弹簧没了,系统可以随便漂移),这张表不存在——
-  "单位敲击响应"根本定义不下来。这不是数学洁癖,后面 P18 会回来。
+- 坑:若 $A$ 不可逆,"单位敲击响应"根本定义不下来——P18 会回来。
 
 ```sources
 S2 S3
 ```
 
-## P04 · 任意源 = 一排单位敲击
+## P04 · 任意源 = 一排单位敲击 {mode=theater inherits=P02 objects=source,system,response}
 
-还是那个系统。这次外力是 $b=(2,\,3)$。
-
-关键观察:任何向量都能拆成单位向量的加权和:
-
-$$\begin{pmatrix}2\\ 3\end{pmatrix}=2\begin{pmatrix}1\\ 0\end{pmatrix}+3\begin{pmatrix}0\\ 1\end{pmatrix}$$
-
-因为系统是**线性**的,响应可以拆开算再合上:
-
-$$x=A^{-1}\Big(2\,e_1+3\,e_2\Big)=2\,\underbrace{A^{-1}e_1}_{\text{戳第 1 块的响应}}+3\,\underbrace{A^{-1}e_2}_{\text{戳第 2 块的响应}}$$
-
-**任意源的响应 = 单位敲击响应的加权和,权重就是源本身。**[C002,C003]
-
-```visual
-<svg viewBox="0 0 640 190" style="color:var(--ink);font-family:var(--sans)" font-size="13">
-  <text x="100" y="26" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">2 × 戳块1 的响应</text>
-  <line x1="30" y1="150" x2="170" y2="150" stroke="currentColor" stroke-width="2"/>
-  <path d="M 60 150 L 100 92 L 140 150" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
-  <text x="100" y="80" text-anchor="middle" fill="var(--ink3)" font-size="11">×2</text>
-  <text x="215" y="130" fill="currentColor" font-size="18">+</text>
-  <text x="330" y="26" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">3 × 戳块2 的响应</text>
-  <line x1="260" y1="150" x2="400" y2="150" stroke="currentColor" stroke-width="2"/>
-  <path d="M 290 150 L 330 69 L 370 150" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2.5"/>
-  <text x="330" y="58" text-anchor="middle" fill="var(--ink3)" font-size="11">×3</text>
-  <text x="440" y="130" fill="currentColor" font-size="18">=</text>
-  <text x="545" y="26" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="12">总响应 b=(2,3)</text>
-  <line x1="470" y1="150" x2="620" y2="150" stroke="currentColor" stroke-width="2"/>
-  <path d="M 500 150 L 545 46 L 590 150" fill="none" stroke="oklch(0.62 0.13 250)" stroke-width="3"/>
-  <text x="545" y="170" text-anchor="middle" fill="var(--ink3)" font-size="11">两个响应图形直接相加</text>
+```scene
+<b1>把戳块 1 的力加倍:2·e₁。注意左边的图和右边的数。</b1>
+<b2>响应也精确加倍——"线性"的全部意思。</b2>
+<b3>再在块 2 上戳 3 份:3·e₂。</b3>
+<b4>块 2 的响应同样放大 3 倍。</b4>
+<b5>两组力同时作用:两个位移直接相加。总响应 = 查表相加。</b5>
+<svg viewBox="0 0 640 260" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <g data-beat="1" data-obj="system">
+    <rect x="30" y="150" width="14" height="60" fill="var(--ink3)"/>
+    <rect x="120" y="160" width="52" height="44" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+    <text x="146" y="187" text-anchor="middle" fill="currentColor">块1</text>
+    <path d="M 172 182 q 10 -12 20 0 q 10 12 20 0 q 10 -12 20 0 q 10 12 20 0" fill="none" stroke="oklch(0.55 0.13 250)" stroke-width="2"/>
+    <rect x="252" y="160" width="52" height="44" rx="6" fill="oklch(0.80 0.09 92)" stroke="currentColor"/>
+    <text x="278" y="187" text-anchor="middle" fill="currentColor">块2</text>
+    <line x1="304" y1="182" x2="384" y2="182" stroke="currentColor" stroke-width="2"/>
+    <rect x="384" y="150" width="14" height="60" fill="var(--ink3)"/>
+  </g>
+  <g data-beat="2" data-obj="source">
+    <path d="M 146 96 L 146 154" stroke="oklch(0.68 0.15 55)" stroke-width="4" marker-end="url(#arP4a)"/>
+    <text x="160" y="90" fill="oklch(0.68 0.15 55)" font-size="12">2·e₁</text>
+    <defs><marker id="arP4a" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.68 0.15 55)"/></marker></defs>
+  </g>
+  <g data-beat="3" data-obj="response" data-fx="growx">
+    <path d="M 172 182 L 292 182" stroke="oklch(0.72 0.12 250)" stroke-width="3.5" marker-end="url(#arP4b)"/>
+    <text x="230" y="172" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="12">+0.8(= 2 × 0.4)</text>
+    <defs><marker id="arP4b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.72 0.12 250)"/></marker></defs>
+  </g>
+  <g data-beat="4" data-obj="source">
+    <path d="M 278 96 L 278 154" stroke="oklch(0.68 0.15 55)" stroke-width="4.5" marker-end="url(#arP4a)"/>
+    <text x="292" y="90" fill="oklch(0.68 0.15 55)" font-size="12">3·e₂</text>
+  </g>
+  <g data-beat="5" data-obj="response" data-fx="growx">
+    <path d="M 252 182 L 172 182" stroke="oklch(0.72 0.12 250)" stroke-width="3.5" marker-end="url(#arP4c)"/>
+    <text x="212" y="200" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="12">−0.6(= 3 × −0.2)</text>
+    <defs><marker id="arP4c" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.72 0.12 250)"/></marker></defs>
+    <rect x="440" y="96" width="170" height="130" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+    <text x="525" y="126" text-anchor="middle" fill="var(--blue-ink)" font-size="13" font-family="var(--mono)">x = 2·col₁ + 3·col₂</text>
+    <text x="525" y="152" text-anchor="middle" fill="var(--blue-ink)" font-size="13" font-family="var(--mono)">= 2(0.4,−0.2)</text>
+    <text x="525" y="174" text-anchor="middle" fill="var(--blue-ink)" font-size="13" font-family="var(--mono)"> + 3(−0.2,0.6)</text>
+    <text x="525" y="202" text-anchor="middle" fill="var(--ink3)" font-size="11">= (0.2, 1.4) · 图形相加 = 数字相加</text>
+  </g>
 </svg>
 ```
+
+x 的数值自查:$x=A^{-1}b=\frac15\begin{pmatrix}2&-1\\-1&3\end{pmatrix}\begin{pmatrix}2\\3\end{pmatrix}=(0.2,\,1.4)$,与图中一致。[C002,C003]
 
 这就是"查表相加"合法的全部理由:线性。
 非线性系统里这条路直接断掉——P18 会专门讲。
@@ -195,43 +269,51 @@ $$x=A^{-1}\Big(2\,e_1+3\,e_2\Big)=2\,\underbrace{A^{-1}e_1}_{\text{戳第 1 块�
 S2 S17
 ```
 
-## P05 · 从两个自由度到一根连续的弦
+## P05 · 从两个自由度到一根连续的弦 {mode=theater inherits=P02 objects=source,delta}
 
-现在把自由度从 2 个变成无穷多个:一根弦,每个位置 $x'$ 都可能被敲。
+先猜再看:下面把"一个点的单位力"逐步压窄。宽度压成一半、面积保持 1,高度应该怎么变?
 
-离散世界"戳第 $j$ 块"的单位力,在连续世界的对应物是什么?
-是"只在一个点上、总量为 1 的力"。它无限窄,同时无限高,围出来的面积是 1。
-
-```capsule K2 · δ 函数,最少必要版
-δ(x−x') 只有两个性质,本 Lecture 只用这两个:
-1. 筛选:除了 x = x' 一点,处处为零。
-2. 归一:积分为 1,$\int \delta(x-x')\,dx' = 1$。
-推论(筛选性质):$\int \delta(x-x')\,f(x')\,dx' = f(x)$。
+```predict
+矩形宽度压成一半,为了保持面积 = 1,高度应该?
+- [x] ×2:面积 = 宽 × 高,宽减半则高加倍
+- 不变:高度和宽度无关
+- ×½:跟着一起变小
+?? 每次都猜一下——"变的是什么、不变的是什么"是这一页唯一的看点。
 ```
 
-于是离散的"第 $j$ 列响应表"升级为连续的**二元函数**:
-
-```visual
-<svg viewBox="0 0 640 200" style="color:var(--ink);font-family:var(--sans)" font-size="12">
-  <text x="320" y="20" text-anchor="middle" fill="var(--ink3)">把"一个点的单位力"逐步推到极限:宽度→0,高度→∞,面积恒等于 1</text>
-  <line x1="30" y1="165" x2="190" y2="165" stroke="currentColor"/>
-  <rect x="88" y="90" width="44" height="75" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
-  <text x="110" y="186" text-anchor="middle" fill="var(--ink3)">宽 w</text>
-  <text x="110" y="80" text-anchor="middle" fill="var(--ink3)">高 1/w</text>
-  <line x1="230" y1="165" x2="390" y2="165" stroke="currentColor"/>
-  <rect x="296" y="45" width="28" height="120" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
-  <text x="310" y="186" text-anchor="middle" fill="var(--ink3)">更窄</text>
-  <line x1="450" y1="165" x2="610" y2="165" stroke="currentColor"/>
-  <path d="M 528 165 L 530 22 L 532 165 Z" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
-  <text x="530" y="186" text-anchor="middle" fill="var(--ink3)">→ δ(x−x′)</text>
-  <text x="320" y="40" text-anchor="middle" fill="oklch(0.68 0.13 92)" font-size="13">面积 = 宽 × 高 = 1(黄色,恒定)</text>
+```scene
+<b1>一个单位力,铺在宽 w 上。盯住金色的"面积 = 1"——它全程不变。</b1>
+<b2>宽度压一半,高度加倍。面积还是 1。</b2>
+<b3>再压一半,再翻倍。</b3>
+<b4>极限:无限窄、无限高、面积恒 1。它就是 δ(x−x′)——连续世界的"单位敲击"。</b4>
+<svg viewBox="0 0 640 240" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <g data-beat="1" data-obj="source">
+    <line x1="30" y1="185" x2="190" y2="185" stroke="currentColor"/>
+    <rect x="88" y="105" width="44" height="80" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+    <text x="110" y="205" text-anchor="middle" fill="var(--ink3)">宽 w</text>
+    <text x="110" y="95" text-anchor="middle" fill="var(--ink3)">高 1/w</text>
+    <rect x="30" y="18" width="160" height="30" rx="8" fill="none" stroke="oklch(0.68 0.13 92)" stroke-width="2"/>
+    <text x="110" y="38" text-anchor="middle" fill="oklch(0.55 0.12 92)" font-size="13" font-family="var(--mono)">面积 = 1(不变)</text>
+  </g>
+  <g data-beat="2" data-obj="delta">
+    <line x1="230" y1="185" x2="390" y2="185" stroke="currentColor"/>
+    <rect x="296" y="65" width="28" height="120" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+    <text x="310" y="205" text-anchor="middle" fill="var(--ink3)">w/2</text>
+  </g>
+  <g data-beat="3" data-obj="delta">
+    <line x1="430" y1="185" x2="590" y2="185" stroke="currentColor"/>
+    <rect x="500" y="25" width="20" height="160" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+    <text x="510" y="205" text-anchor="middle" fill="var(--ink3)">w/4</text>
+  </g>
+  <g data-beat="4" data-obj="delta">
+    <path d="M 596 185 L 602 10 L 608 185 Z" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+    <text x="560" y="30" fill="oklch(0.55 0.12 92)" font-size="13" font-family="var(--mono)">→ δ(x−x′)</text>
+  </g>
 </svg>
 ```
 
-
-$$\underbrace{G(x,\,x')}_{\text{在 }x'\text{ 敲一下,}x\text{ 处的响应}}$$
-
-单位冲击 δ 用黄色标记,源用橙色,响应用蓝色——全文不变,看到颜色就知道角色。
+于是离散的"第 $j$ 列响应表"升级为连续的**二元函数**:
+$G(x,\,x')$ = 在 $x'$ 敲一下、在 $x$ 处的响应。全文角色色固定:源橙、响应蓝、δ 金、G 深蓝。
 
 ```sources
 S3 S18
@@ -254,52 +336,79 @@ S3 S18
 
 $G$ 的正式名字:格林函数。为什么叫这个名字,P07 讲完定义你就不会再问。[C001]
 
+```visual
+<svg viewBox="0 0 640 130" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <line x1="60" y1="80" x2="580" y2="80" stroke="currentColor" stroke-width="2"/>
+  <circle cx="180" cy="80" r="9" fill="oklch(0.68 0.15 55)"/>
+  <text x="180" y="112" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="13">x′(敲击点)</text>
+  <circle cx="460" cy="80" r="9" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="3"/>
+  <text x="460" y="112" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="13">x(观察点)</text>
+  <path d="M 195 66 C 280 20 380 20 448 64" fill="none" stroke="oklch(0.5 0.14 260)" stroke-width="2.5" marker-end="url(#arP6)"/>
+  <defs><marker id="arP6" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="oklch(0.5 0.14 260)"/></marker></defs>
+  <text x="318" y="36" text-anchor="middle" fill="oklch(0.5 0.14 260)" font-size="14" font-family="var(--mono)">G(x, x′)</text>
+  <text x="318" y="62" text-anchor="middle" fill="var(--ink3)" font-size="11">在 x′ 敲一下 → 在 x 看响应;两个自变量,缺一不可</text>
+</svg>
+```
+
+
 ```sources
 S2 S3
 ```
 
-## P07 · 现在,LG = δ 才自然出现
+## P07 · 现在,LG = δ 才自然出现 {mode=derive inherits=P05 objects=delta,kernel}
 
-$G$ 是"单位源产生的响应"。**响应场必须仍然满足这个系统的方程**——
-只是这次的源,恰好是一个单位点源,也就是 δ。
+真正的视觉证明:不看定义,**从 G 出发,两次求导,亲手把 δ 画出来**。
 
-写成方程(以弦为例,算符 $L=-\frac{d^2}{dx^2}$):
-
-$$L\,G(x,x')=\delta(x-x')$$
-
-这一行不再莫名其妙,它只是把一句话翻译成符号:
-
-> **在 $x'$ 敲单位一下,得到的形状,依然满足弦的方程。**
-
-```visual
-<svg viewBox="0 0 640 150" style="color:var(--ink);font-family:var(--sans)" font-size="13">
-  <defs><marker id="arP7" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+```scene
+<b1>这是 G:单位敲击的响应,一座三角帆。(深蓝 = 核)</b1>
+<b2>对 x 求一次导:左段斜率 +0.5,右段 −0.5。</b2>
+<b3>再求一次导:两段各自变成 0——除了一点,处处为零。</b3>
+<b4>那"一点"呢?斜率从 +0.5 跳到 −0.5,跳了 −1:这里竖起一根金色尖峰。</b4>
+<b5>把四拍连起来读:负号让跳跃方向对上。LG = δ 不是定义,是读出来的。</b5>
+<svg viewBox="0 0 640 300" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <defs><marker id="arP7s" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
     <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
-  <rect x="40" y="45" width="140" height="52" rx="8" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
-  <text x="110" y="68" text-anchor="middle" fill="currentColor">单位点源</text>
-  <text x="110" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">δ(x − x′)(黄色)</text>
-  <rect x="250" y="45" width="140" height="52" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
-  <text x="320" y="68" text-anchor="middle" fill="currentColor">系统 L</text>
-  <text x="320" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">弦:−d²/dx² + 边界</text>
-  <rect x="460" y="45" width="140" height="52" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
-  <text x="530" y="68" text-anchor="middle" fill="currentColor">响应形状 G</text>
-  <text x="530" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">蓝:三角形帆(P09)</text>
-  <line x1="180" y1="71" x2="244" y2="71" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP7)"/>
-  <line x1="390" y1="71" x2="454" y2="71" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP7)"/>
-  <text x="212" y="60" text-anchor="middle" fill="var(--ink3)" font-size="11">喂进去</text>
-  <text x="422" y="60" text-anchor="middle" fill="var(--ink3)" font-size="11">吐出来</text>
-  <text x="320" y="128" text-anchor="middle" fill="var(--ink3)" font-size="12">这张"流水线证"就是 LG = δ:输出恰好是 G 的名字</text>
+  <line x1="40" y1="150" x2="600" y2="150" stroke="var(--ink3)" stroke-width="1.5"/>
+  <g data-beat="1" data-obj="kernel">
+    <path d="M 40 150 L 320 84 L 600 150" fill="none" stroke="oklch(0.5 0.14 260)" stroke-width="3"/>
+    <text x="430" y="66" fill="oklch(0.5 0.14 260)" font-size="13">G(x, x′):三角帆(深蓝 = 核)</text>
+    <line x1="320" y1="84" x2="320" y2="150" stroke="var(--ink3)" stroke-dasharray="3 4"/>
+    <text x="332" y="120" fill="var(--ink3)" font-size="11">x′(敲击点)</text>
+  </g>
+  <g data-beat="2">
+    <path d="M 60 138 L 280 138" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
+    <text x="150" y="130" fill="oklch(0.68 0.15 55)" font-size="11">G′ = +0.5</text>
+    <path d="M 360 162 L 580 162" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
+    <text x="470" y="180" fill="oklch(0.68 0.15 55)" font-size="11">G′ = −0.5</text>
+    <path d="M 300 138 L 340 162" stroke="var(--ink3)" stroke-dasharray="4 3" marker-end="url(#arP7s)"/>
+    <text x="320" y="210" text-anchor="middle" fill="var(--ink3)">一次导数:斜率图(折点 = 跳变处)</text>
+  </g>
+  <g data-beat="3">
+    <line x1="60" y1="248" x2="580" y2="248" stroke="oklch(0.6 0.02 60)" stroke-width="2.5"/>
+    <text x="90" y="238" fill="var(--ink3)" font-size="11">G″ = 0(左段)</text>
+    <text x="520" y="238" fill="var(--ink3)" font-size="11">G″ = 0(右段)</text>
+  </g>
+  <g data-beat="4" data-obj="delta">
+    <path d="M 314 262 L 320 220 L 326 262 Z" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+    <text x="352" y="236" fill="oklch(0.55 0.12 92)" font-size="12">斜率跳 −1 → 尖峰 δ(x−x′)</text>
+  </g>
+  <g data-beat="5" data-obj="delta">
+    <rect x="150" y="20" width="340" height="0" fill="none"/>
+    <text x="320" y="286" text-anchor="middle" fill="currentColor" font-size="15" font-family="var(--mono)">−G″ = δ   ⇒   L G = δ</text>
+  </g>
 </svg>
 ```
 
-离散对照一模一样:$A\,g_j=e_j$(第 $j$ 列)。连续版只是把"列"换成"$x'$"。
+离散对照一模一样:$A\,g_j=e_j$(第 $j$ 列)。连续版只是把"列"换成"$x'$"。这行等式就是格林函数的定义 [C001]。
 
-```capsule K-小 · 微分算符,一句话
-$L=-\frac{d^2}{dx^2}$ 读作"把函数微分两次再变号"。它对形状做的事:
-鼓包越尖,作用越猛。$L\,G=\delta$ 就是"尖峰输入"对应的"输出形状"。
+```notes
+- 微分算符,一句话:$L=-\frac{d^2}{dx^2}$ 读作"微分两次再变号"。鼓包越尖,作用越猛。
+- 符号为什么带负号:开口向上的抛物线二阶导为正;弦的势能要求"鼓包向下凹",
+  所以定义 $L$ 带负号,让 $-G''$ 在折点处给出**正**强度的 δ(斜率从 +0.5 跳到 −0.5,
+  跳跃 = −1;$-G''$ 的强度 = +1)。若不带负号,得把 δ 写成负的——约定而已,但要一致用到底。
+- "指定边界条件下"六个字不可省:方程只定半个 G,另一半由边界定(P08)。
 ```
-
-注意"指定边界条件下"六个字:方程只定了半个 G,另外一半由边界定。下一页专门讲。[C001]
 
 ```sources
 S2 S3 S10
@@ -455,6 +564,27 @@ $$u(x)=\int G(x,x')\,f(x')\,dx'$$
 > 写回物理单位的弦 $-T\,u''=q$($[T]=\mathrm{N}$,$[q]=\mathrm{N/m}$):$[G]=\mathrm{m/N}$。
 > 结构一模一样,$T$ 只是坐进了算符。全文其余页面沿用归一化模型。
 
+```visual
+<svg viewBox="0 0 640 140" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <defs><marker id="arP10" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
+  <rect x="30" y="40" width="150" height="56" rx="8" fill="oklch(0.95 0.04 55)" stroke="oklch(0.68 0.15 55)"/>
+  <text x="105" y="64" text-anchor="middle" fill="currentColor">源 f(x′)</text>
+  <text x="105" y="84" text-anchor="middle" fill="var(--ink3)" font-size="11">橙:切成小敲击</text>
+  <rect x="245" y="40" width="150" height="56" rx="8" fill="oklch(0.93 0.05 260)" stroke="oklch(0.5 0.14 260)"/>
+  <text x="320" y="64" text-anchor="middle" fill="currentColor">查表 G(x,x′)</text>
+  <text x="320" y="84" text-anchor="middle" fill="var(--ink3)" font-size="11">深蓝:单位敲击响应</text>
+  <rect x="460" y="40" width="150" height="56" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="535" y="64" text-anchor="middle" fill="currentColor">响应 u(x)</text>
+  <text x="535" y="84" text-anchor="middle" fill="var(--ink3)" font-size="11">蓝:全部相加</text>
+  <line x1="180" y1="68" x2="240" y2="68" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP10)"/>
+  <line x1="395" y1="68" x2="455" y2="68" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP10)"/>
+  <text x="320" y="124" text-anchor="middle" fill="var(--ink3)" font-size="12">这套"橙→深蓝→蓝"的流水线,从 P02 到 P17 不换色</text>
+</svg>
+```
+
+
+
 四个性质,逐条对应你已见过的东西:
 
 1. 源加倍 → 响应加倍($G$ 不变)。
@@ -468,53 +598,70 @@ $$u(x)=\int G(x,x')\,f(x')\,dx'$$
 S2 S17
 ```
 
-## P11 · 平移不变的世界:卷积与傅里叶
+## P11 · 平移不变的世界:卷积与傅里叶 {mode=derive inherits=P05 objects=source,response}
 
-无限长的弦(没有钉死的端点)有一条新对称性:整体平移,系统不变。
-于是 $G$ 只依赖**差**:$G(x,x')=G(x-x')$。积分变成**卷积**:
+先猜再看:实空间里卷积是"逐点扫过整个域"。什么对称性让它在另一个世界里变成乘法?
 
-$$u(x)=\int G(x-x')\,f(x')\,dx'$$
-
-```capsule K3 · 傅里叶变换,最少必要版
-把函数看成不同波长正弦波的叠加。
-傅里叶变换 = 换一组坐标:从"每个位置的值"换成"每个波长的振幅"。
-它有一条 magic:微分变乘法($\partial_x \to ik$),卷积变乘法。
+```predict
+什么性质使卷积在傅里叶世界里变成乘法?
+- [x] 平移不变:源挪个位置,响应只是跟着挪,形状不变
+- 能量守恒:总量不会凭空消失
+- 边界为零:两端钉死
+?? P08 的"无限长/周期域"就是平移不变。有它,G 只依赖差,卷积才退化为乘法。
 ```
 
-magic 用到 $L\,G=\delta$ 上:微分变乘法,δ 变常数 1,于是
-
-$$\hat G(k)=\frac{1}{\hat L(k)}$$
-
-```visual
-<svg viewBox="0 0 640 190" style="color:var(--ink);font-family:var(--sans)" font-size="12">
-  <text x="140" y="24" text-anchor="middle" fill="currentColor" font-size="13">实空间:卷积(麻烦)</text>
-  <text x="500" y="24" text-anchor="middle" fill="currentColor" font-size="13">傅里叶空间:乘法(省事)</text>
-  <rect x="50" y="40" width="180" height="60" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
-  <text x="140" y="66" text-anchor="middle" fill="currentColor">u = G ⊛ f</text>
-  <text x="140" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">逐点扫过整个域</text>
-  <rect x="410" y="40" width="180" height="60" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
-  <text x="500" y="66" text-anchor="middle" fill="currentColor">Û(k) = Ĝ(k) · f̂(k)</text>
-  <text x="500" y="86" text-anchor="middle" fill="var(--ink3)" font-size="11">每个 k 一次除法</text>
-  <path d="M 230 70 L 300 70" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arF1)"/>
-  <path d="M 410 100 L 340 100" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arF1)"/>
-  <defs><marker id="arF1" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
-  <text x="265" y="60" text-anchor="middle" fill="oklch(0.62 0.13 250)" font-size="11">傅里叶变换</text>
-  <text x="375" y="116" text-anchor="middle" fill="var(--ink3)" font-size="11">反变换回来</text>
-  <line x1="60" y1="140" x2="180" y2="140" stroke="currentColor"/>
-  <path d="M 60 138 L 90 120 L 120 138 L 150 114 L 180 132" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2"/>
-  <text x="120" y="158" text-anchor="middle" fill="var(--ink3)" font-size="11">锯齿状叠加</text>
-  <line x1="430" y1="140" x2="560" y2="140" stroke="currentColor"/>
-  <circle cx="475" cy="128" r="4" fill="oklch(0.72 0.12 250)"/><circle cx="500" cy="121" r="4" fill="oklch(0.72 0.12 250)"/><circle cx="525" cy="128" r="4" fill="oklch(0.72 0.12 250)"/>
-  <text x="495" y="158" text-anchor="middle" fill="var(--ink3)" font-size="11">几个独立的数</text>
-  <text x="320" y="182" text-anchor="middle" fill="var(--ink3)">对称性把"解方程"降级成"做除法"</text>
+```scene
+<b1>任意载荷 f:切成一排小敲击。(橙 = 每个小源)</b1>
+<b2>每个小敲击 → 自己的小三角响应:形状相同,位置跟着源走,高矮跟着强度走。</b2>
+<b3>全部相加:蓝色曲线就是 u(x)。卷积 = 查表相加。</b3>
+<svg viewBox="0 0 640 220" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <line x1="40" y1="160" x2="600" y2="160" stroke="var(--ink3)" stroke-width="1.5"/>
+  <g data-beat="1" data-obj="source">
+    <path d="M 90 160 L 90 120 L 96 160 Z" fill="oklch(0.68 0.15 55)"/>
+    <path d="M 210 160 L 216 100 L 222 160 Z" fill="oklch(0.68 0.15 55)"/>
+    <path d="M 330 160 L 336 132 L 342 160 Z" fill="oklch(0.68 0.15 55)"/>
+    <path d="M 450 160 L 456 108 L 462 160 Z" fill="oklch(0.68 0.15 55)"/>
+    <text x="320" y="200" text-anchor="middle" fill="var(--ink3)">f(x′):一排小敲击,高矮 = 强度</text>
+  </g>
+  <g data-beat="2" data-obj="response">
+    <path d="M 50 160 L 90 128 L 130 160" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="1.6"/>
+    <path d="M 176 160 L 216 76 L 256 160" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="1.6"/>
+    <path d="M 296 160 L 336 118 L 376 160" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="1.6"/>
+    <path d="M 416 160 L 456 84 L 496 160" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="1.6"/>
+    <text x="560" y="90" fill="oklch(0.55 0.13 250)" font-size="12">每个源的小三角</text>
+  </g>
+  <g data-beat="3" data-obj="response" data-fx="grow">
+    <path d="M 40 160 C 120 150 180 120 240 106 C 300 96 340 96 400 88 C 470 78 540 118 600 138" fill="none" stroke="oklch(0.55 0.13 250)" stroke-width="3"/>
+    <text x="320" y="60" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="13">u(x) = ∫ G(x,x′) f(x′) dx′(全部相加)</text>
+  </g>
 </svg>
 ```
 
-对 $L=-\frac{d^2}{dx^2}+m^2$:$\hat L(k)=k^2+m^2$,故 $\hat G(k)=\frac{1}{k^2+m^2}$。✓ 极限自查:$k\to\infty$ 时 $\hat G\to 0$——尖锐源的高频响应衰减,合理。[C006]
+```scene
+<b1>换到傅里叶世界:每个波长一个坐标。微分变乘法,卷积变乘法。</b1>
+<b2>解微分方程降级为做一次除法。P17 的量子器件仿真,就是这里的工业版。</b2>
+<svg viewBox="0 0 640 150" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <defs><marker id="arP11" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
+  <rect x="40" y="30" width="180" height="56" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="130" y="54" text-anchor="middle" fill="currentColor" font-family="var(--mono)">u = G ⊛ f</text>
+  <text x="130" y="74" text-anchor="middle" fill="var(--ink3)" font-size="11">实空间:逐点卷积</text>
+  <rect x="420" y="30" width="180" height="56" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
+  <text x="510" y="54" text-anchor="middle" fill="currentColor" font-family="var(--mono)">Û(k) = Ĝ(k)·f̂(k)</text>
+  <text x="510" y="74" text-anchor="middle" fill="var(--ink3)" font-size="11">k 空间:逐点乘法</text>
+  <path d="M 224 58 L 414 58" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP11)"/>
+  <text x="318" y="46" text-anchor="middle" fill="oklch(0.62 0.13 250)" font-size="11">平移不变 ⇒ 傅里叶变换</text>
+  <text x="320" y="124" text-anchor="middle" fill="var(--ink3)">帽子 = 变换后的像。对称性把"解方程"降级成"做除法"</text>
+</svg>
+```
 
-**为什么这一页重要**:凡是有平移对称的问题(均匀膜、无限栅格、自由空间),
-"解微分方程"都退化成"做一个除法"。P17 的量子器件会再遇到它。
+```notes
+傅里叶变换,最少必要版:把函数看成不同波长正弦波的叠加;变换 = 换坐标,
+从"每个位置的值"换成"每个波长的振幅"。两条 magic:微分变乘法($\partial_x\to ik$),
+卷积变乘法。用到 $L\,G=\delta$:δ 的像是常数 1,故 $\hat G(k)=1/\hat L(k)$。
+对 $L=-\frac{d^2}{dx^2}+m^2$:$\hat L(k)=k^2+m^2$,$\hat G(k)=\frac{1}{k^2+m^2}$。
+极限自查:$k\to\infty$ 时 $\hat G\to 0$——尖锐源的高频响应衰减,合理。[C006]
+```
 
 ```sources
 S2 S17
