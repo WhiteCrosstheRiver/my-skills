@@ -358,44 +358,50 @@ S2 S3
 
 ## P07 · 现在,LG = δ 才自然出现 {mode=derive inherits=P05 objects=delta,kernel}
 
-真正的视觉证明:不看定义,**从 G 出发,两次求导,亲手把 δ 画出来**。
+真正的视觉证明:不看定义,从 G 出发,两次求导,亲手把 δ 画出来——
+**连那个负号,也要你亲眼看见它翻面。**
 
 ```scene
 <b1>这是 G:单位敲击的响应,一座三角帆。(深蓝 = 核)</b1>
 <b2>对 x 求一次导:左段斜率 +0.5,右段 −0.5。</b2>
-<b3>再求一次导:两段各自变成 0——除了一点,处处为零。</b3>
-<b4>那"一点"呢?斜率从 +0.5 跳到 −0.5,跳了 −1:这里竖起一根金色尖峰。</b4>
-<b5>把四拍连起来读:负号让跳跃方向对上。LG = δ 不是定义,是读出来的。</b5>
-<svg viewBox="0 0 640 300" style="color:var(--ink);font-family:var(--sans)" font-size="12">
-  <defs><marker id="arP7s" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
+<b3>再求一次导:两段各自变成 0;而折点处斜率跳了 −1——所以这一点的二阶导是负尖峰。看它的颜色:红,方向向下。G″ = −δ。</b3>
+<b4>我们的算符偏偏带一个负号:L ≡ −d²/dx²。负负得正——红尖峰翻面,变成金色向上尖峰。−G″ = δ。</b4>
+<b5>合体:L G = δ。定义不是钦定的,是两次求导 + 一个负号读出来的。</b5>
+<svg viewBox="0 0 640 320" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <defs><marker id="arP7n" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="var(--ink3)"/></marker></defs>
   <line x1="40" y1="150" x2="600" y2="150" stroke="var(--ink3)" stroke-width="1.5"/>
   <g data-beat="1" data-obj="kernel">
     <path d="M 40 150 L 320 84 L 600 150" fill="none" stroke="oklch(0.5 0.14 260)" stroke-width="3"/>
     <text x="430" y="66" fill="oklch(0.5 0.14 260)" font-size="13">G(x, x′):三角帆(深蓝 = 核)</text>
     <line x1="320" y1="84" x2="320" y2="150" stroke="var(--ink3)" stroke-dasharray="3 4"/>
-    <text x="332" y="120" fill="var(--ink3)" font-size="11">x′(敲击点)</text>
+    <text x="332" y="120" fill="var(--ink3)" font-size="11">x′</text>
   </g>
   <g data-beat="2">
     <path d="M 60 138 L 280 138" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
     <text x="150" y="130" fill="oklch(0.68 0.15 55)" font-size="11">G′ = +0.5</text>
     <path d="M 360 162 L 580 162" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
     <text x="470" y="180" fill="oklch(0.68 0.15 55)" font-size="11">G′ = −0.5</text>
-    <path d="M 300 138 L 340 162" stroke="var(--ink3)" stroke-dasharray="4 3" marker-end="url(#arP7s)"/>
-    <text x="320" y="210" text-anchor="middle" fill="var(--ink3)">一次导数:斜率图(折点 = 跳变处)</text>
   </g>
-  <g data-beat="3">
-    <line x1="60" y1="248" x2="580" y2="248" stroke="oklch(0.6 0.02 60)" stroke-width="2.5"/>
-    <text x="90" y="238" fill="var(--ink3)" font-size="11">G″ = 0(左段)</text>
-    <text x="520" y="238" fill="var(--ink3)" font-size="11">G″ = 0(右段)</text>
+  <g data-beat="3" data-until="3">
+    <line x1="60" y1="236" x2="580" y2="236" stroke="oklch(0.6 0.02 60)" stroke-width="2.5"/>
+    <text x="100" y="228" fill="var(--ink3)" font-size="11">G″ = 0(除折点)</text>
+    <path d="M 320 236 L 320 262" stroke="oklch(0.58 0.16 25)" stroke-width="3.5" marker-end="url(#arP7r)"/>
+    <text x="352" y="258" fill="oklch(0.58 0.16 25)" font-size="12">红色向下尖峰:G″ = −δ</text>
+    <defs><marker id="arP7r" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="oklch(0.58 0.16 25)"/></marker></defs>
   </g>
   <g data-beat="4" data-obj="delta">
-    <path d="M 314 262 L 320 220 L 326 262 Z" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
-    <text x="352" y="236" fill="oklch(0.55 0.12 92)" font-size="12">斜率跳 −1 → 尖峰 δ(x−x′)</text>
+    <circle cx="120" cy="236" r="14" fill="var(--blue-bg)" stroke="currentColor"/>
+    <text x="120" y="241" text-anchor="middle" fill="currentColor" font-size="15" font-family="var(--mono)">−</text>
+    <path d="M 138 236 L 168 236" stroke="var(--ink3)" stroke-dasharray="4 3" marker-end="url(#arP7n)"/>
+    <path d="M 314 268 L 320 216 L 326 268 Z" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+    <text x="352" y="240" fill="oklch(0.55 0.12 92)" font-size="12">翻面!金色向上尖峰:−G″ = +δ</text>
+    <text x="150" y="272" fill="var(--ink3)" font-size="11">L 的负号(视觉动作)</text>
   </g>
   <g data-beat="5" data-obj="delta">
     <rect x="150" y="20" width="340" height="0" fill="none"/>
-    <text x="320" y="286" text-anchor="middle" fill="currentColor" font-size="15" font-family="var(--mono)">−G″ = δ   ⇒   L G = δ</text>
+    <text x="320" y="300" text-anchor="middle" fill="currentColor" font-size="15" font-family="var(--mono)">L ≡ −d²/dx²   ⇒   L G = δ</text>
   </g>
 </svg>
 ```
@@ -404,9 +410,9 @@ S2 S3
 
 ```notes
 - 微分算符,一句话:$L=-\frac{d^2}{dx^2}$ 读作"微分两次再变号"。鼓包越尖,作用越猛。
-- 符号为什么带负号:开口向上的抛物线二阶导为正;弦的势能要求"鼓包向下凹",
-  所以定义 $L$ 带负号,让 $-G''$ 在折点处给出**正**强度的 δ(斜率从 +0.5 跳到 −0.5,
-  跳跃 = −1;$-G''$ 的强度 = +1)。若不带负号,得把 δ 写成负的——约定而已,但要一致用到底。
+- 负号为什么必须显式讲:直接写 $G''=\delta$ 的人,和写 $-G''=\delta$ 的人,画的尖峰方向相反。
+  本 Lecture 的约定:鼓包向上时斜率从正跳到负,跳跃 = −1,所以 $G''=-\delta$;
+  $L$ 自带负号把它翻回正。两处约定必须同时成立,符号才自洽(V-01 实算核对的就是这个跳跃)。
 - "指定边界条件下"六个字不可省:方程只定半个 G,另一半由边界定(P08)。
 ```
 
@@ -456,22 +462,51 @@ Physics SE 高赞问题里,"为什么我的 G 和书上的不一样"的答案几
 S2 S10 S18
 ```
 
-## P09 · 完整例题:两端固定弦,一算到底
+## P09 · 完整例题:两端固定弦,一算到底 {mode=derive inherits=P07 objects=kernel,delta,source}
 
-把 P01 的弦正式做掉。域 $[0,1]$,边界 $G(0,x')=G(1,x')=0$:
+把 P01 的弦正式做掉。域 $[0,1]$,敲击点 $x'$,边界 $G(0,x')=G(1,x')=0$。
+推导只有四步,每一步都对应图上一个可见的动作。
 
-$$L=-\frac{d^2}{dx^2},\qquad L\,G=\delta(x-x')$$
-
-**第一步:除敲击点外,G 是直线。** 因为 $G''=0$ 的解就是一次函数。
-
-**第二步:两端贴零。** 左段直线要过 $(0,0)$ → 左段 $=c_L\,x$;右段过 $(1,0)$ → 右段 $=c_R\,(1-x)$。
-
-**第三步:连接条件。** G 本身在 $x'$ 处连续(弦不断),但斜率要**向下跳 1**——
-这正是 δ 的强度(把方程从 $x'-\epsilon$ 积到 $x'+\epsilon$:$-G'|_{-}^{+}=1$)。
-
-解出三件事:连续、斜率跳 1、两端为零。得:
-
-$$\boxed{\;G(x,x')=\min(x,x')\,\bigl(1-\max(x,x')\bigr)\;}$$
+```scene
+<b1>方程说:除敲击点外 G″ = 0。二阶导为零的函数只有直线——左右各冒出一条未知直线。</b1>
+<b2>边界条件进场:G(0)=0、G(1)=0。两条直线各自被钉到端点上。</b2>
+<b3>弦不能断:G 在 x′ 处连续 → 两条线在 x′ 相接。</b3>
+<b4>最后一个条件:斜率跳 −1(δ 的强度)。跳多少确定了两条线的斜率——三角帆唯一成形。</b4>
+<b5>解出三件事:连续、斜率跳 1、两端为零。</b5>
+<svg viewBox="0 0 640 260" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <defs><marker id="arP9" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
+  <line x1="40" y1="180" x2="600" y2="180" stroke="var(--ink3)" stroke-width="1.5"/>
+  <g data-beat="1" data-obj="source">
+    <circle cx="320" cy="180" r="6" fill="oklch(0.85 0.12 92)" stroke="oklch(0.68 0.13 92)"/>
+    <text x="332" y="172" fill="var(--ink3)" font-size="11">x′</text>
+    <path d="M 60 180 L 314 112" stroke="var(--ink3)" stroke-dasharray="5 4" fill="none"/>
+    <path d="M 326 112 L 580 180" stroke="var(--ink3)" stroke-dasharray="5 4" fill="none"/>
+    <text x="130" y="98" fill="var(--ink3)" font-size="11">左:未知直线 y = c₁x</text>
+    <text x="450" y="98" fill="var(--ink3)" font-size="11">右:未知直线 y = c₂(1−x)</text>
+  </g>
+  <g data-beat="2" data-obj="kernel">
+    <path d="M 60 180 L 314 108" stroke="oklch(0.5 0.14 260)" stroke-width="3" fill="none"/>
+    <path d="M 326 108 L 580 180" stroke="oklch(0.5 0.14 260)" stroke-width="3" fill="none"/>
+    <circle cx="40" cy="180" r="5" fill="oklch(0.5 0.14 260)"/>
+    <circle cx="600" cy="180" r="5" fill="oklch(0.5 0.14 260)"/>
+    <text x="52" y="200" fill="oklch(0.5 0.14 260)" font-size="11">G(0)=0</text>
+    <text x="566" y="200" fill="oklch(0.5 0.14 260)" font-size="11">G(1)=0</text>
+  </g>
+  <g data-beat="3" data-obj="delta">
+    <circle cx="320" cy="108" r="6" fill="none" stroke="oklch(0.68 0.13 92)" stroke-width="2.5"/>
+    <text x="262" y="92" fill="oklch(0.55 0.12 92)" font-size="11">在 x′ 相接(连续)</text>
+  </g>
+  <g data-beat="4" data-obj="delta">
+    <path d="M 320 108 L 320 152" stroke="oklch(0.68 0.15 55)" stroke-width="2" marker-end="url(#arP9)"/>
+    <text x="334" y="146" fill="oklch(0.68 0.15 55)" font-size="11">斜率跳 −1(δ 强度)</text>
+  </g>
+  <g data-beat="5" data-obj="kernel">
+    <rect x="120" y="216" width="400" height="0" fill="none"/>
+    <text x="320" y="238" text-anchor="middle" fill="currentColor" font-size="15" font-family="var(--mono)">G(x,x′) = min(x,x′) · (1 − max(x,x′))</text>
+  </g>
+</svg>
+```
 
 自查(dossier V-01,实算):折点左斜率 $+0.5$、右斜率 $-0.5$、跳跃 $-1$——与 δ 强度一致。✓
 
@@ -534,7 +569,7 @@ $$u(x)=\int_0^1 G(x,x')\,dx'=\frac{x(1-x)}{2}$$
  document.getElementById("br").addEventListener("click",()=>{S.a=0.5;S.b=0.75;S.two=false;
    document.getElementById("s1").value=0.5;document.getElementById("s2").value=0.75;
    document.getElementById("v1").textContent="0.50";document.getElementById("v2").textContent="0.75";draw();});
- draw();
+ fit();draw();
 })();
 </script>
 ```
@@ -545,11 +580,48 @@ $$u(x)=\int_0^1 G(x,x')\,dx'=\frac{x(1-x)}{2}$$
 S2 S18
 ```
 
-## P10 · 普遍公式:u(x) = ∫ G(x,x') f(x') dx'
+## P10 · 普遍公式:积分是从求和里长出来的 {mode=derive inherits=P09 objects=source,response}
 
-把 P04 的离散故事翻译回连续世界:
+连续的积分不是天上掉下来的。看它怎么从有限个源一步一步长出来——盯住右边的公式怎么变形。
 
-$$u(x)=\int G(x,x')\,f(x')\,dx'$$
+```scene
+<b1>三个离散源:f₁、f₂、f₃,各戳在自己的位置上。(橙)</b1>
+<b2>响应 = 三项相加:每项 = 强度 × 该位置的 G。这就是"查表相加"。</b2>
+<b3>源加密:10 个。公式还是求和,只是项数变多。</b3>
+<b4>再加密:密到分不清单个源——求和号 Σ 还在,但已经带上了"小宽度 Δx"。</b4>
+<b5>极限:Δx → 0,Σ 拉直成 ∫。积分号是从求和里长出来的。</b5>
+<svg viewBox="0 0 640 300" style="color:var(--ink);font-family:var(--sans)" font-size="12">
+  <line x1="40" y1="170" x2="600" y2="170" stroke="var(--ink3)" stroke-width="1.5"/>
+  <g data-beat="1" data-obj="source">
+    <path d="M 130 170 L 130 120 L 136 170 Z" fill="oklch(0.68 0.15 55)"/>
+    <path d="M 310 170 L 310 96 L 316 170 Z" fill="oklch(0.68 0.15 55)"/>
+    <path d="M 470 170 L 470 134 L 476 170 Z" fill="oklch(0.68 0.15 55)"/>
+    <text x="133" y="112" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="11">f₁</text>
+    <text x="313" y="88" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="11">f₂</text>
+    <text x="473" y="126" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="11">f₃</text>
+  </g>
+  <g data-beat="2" data-obj="response">
+    <path d="M 90 170 L 130 132 L 170 170" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2"/>
+    <path d="M 270 170 L 310 106 L 350 170" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2"/>
+    <path d="M 430 170 L 470 146 L 510 170" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="2"/>
+    <text x="320" y="52" text-anchor="middle" fill="currentColor" font-size="13" font-family="var(--mono)">u = f₁G(x,x₁) + f₂G(x,x₂) + f₃G(x,x₃)</text>
+  </g>
+  <g data-beat="3" data-obj="source">
+    <path d="M 70 170 L 73 136 L 76 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 100 170 L 103 122 L 106 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 130 170 L 133 128 L 136 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 160 170 L 163 112 L 166 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 190 170 L 193 140 L 196 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 220 170 L 223 100 L 226 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 250 170 L 253 118 L 256 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 280 170 L 283 130 L 286 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 310 170 L 313 92 L 316 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 340 170 L 343 108 L 346 170 Z" fill="oklch(0.68 0.15 55)"/>
+    <text x="320" y="72" text-anchor="middle" fill="var(--ink3)" font-size="11" data-until="3">10 个源</text>
+  </g>
+  <g data-beat="4" data-obj="source">
+    <path d="M 60 170 L 62 118 L 64 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 72 170 L 74 108 L 76 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 84 170 L 86 132 L 88 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 96 170 L 98 100 L 100 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 108 170 L 110 122 L 112 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 120 170 L 122 140 L 124 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 132 170 L 134 96 L 136 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 144 170 L 146 128 L 148 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 156 170 L 158 110 L 160 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 168 170 L 170 144 L 172 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 180 170 L 182 104 L 184 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 192 170 L 194 134 L 194.5 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 204 170 L 206 88 L 208 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 216 170 L 218 120 L 220 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 228 170 L 230 138 L 232 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 240 170 L 242 96 L 242.5 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 252 170 L 254 126 L 256 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 264 170 L 266 106 L 268 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 276 170 L 278 132 L 280 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 288 170 L 290 116 L 292 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 300 170 L 302 142 L 304 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 312 170 L 314 90 L 316 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 324 170 L 326 124 L 328 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 336 170 L 338 108 L 340 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 348 170 L 350 136 L 352 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 360 170 L 362 98 L 364 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 372 170 L 374 128 L 376 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 384 170 L 386 112 L 388 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 396 170 L 398 140 L 400 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 408 170 L 410 122 L 412 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 420 170 L 422 148 L 424 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 432 170 L 434 130 L 436 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 444 170 L 446 102 L 448 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 456 170 L 458 136 L 460 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 468 170 L 470 116 L 472 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 480 170 L 482 144 L 484 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 492 170 L 494 126 L 494.5 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 504 170 L 506 108 L 508 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 516 170 L 518 140 L 520 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 528 170 L 530 118 L 532 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 540 170 L 542 146 L 544 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 552 170 L 554 132 L 556 170 Z" fill="oklch(0.68 0.15 55)"/><path d="M 564 170 L 566 152 L 568 170 Z" fill="oklch(0.68 0.15 55)"/>
+    <text x="320" y="72" text-anchor="middle" fill="var(--ink3)" font-size="11">密到分不清:Σᵢ G(x,xᵢ)·fᵢ·Δx</text>
+  </g>
+  <g data-beat="5" data-obj="response">
+    <path d="M 60 170 C 140 128 220 108 320 104 C 420 100 500 122 600 142" fill="none" stroke="oklch(0.72 0.12 250)" stroke-width="3"/>
+    <rect x="150" y="228" width="340" height="0" fill="none"/>
+    <text x="320" y="252" text-anchor="middle" fill="currentColor" font-size="16" font-family="var(--mono)">Σ  →  ∫ :   u(x) = ∫ G(x,x′) f(x′) dx′</text>
+    <text x="320" y="278" text-anchor="middle" fill="var(--ink3)" font-size="11">求和没有消失,只是长成了积分号</text>
+  </g>
+</svg>
+```
 
 | 符号 | 含义 | 量纲(归一化模型,T=1) |
 |---|---|---|
@@ -564,35 +636,12 @@ $$u(x)=\int G(x,x')\,f(x')\,dx'$$
 > 写回物理单位的弦 $-T\,u''=q$($[T]=\mathrm{N}$,$[q]=\mathrm{N/m}$):$[G]=\mathrm{m/N}$。
 > 结构一模一样,$T$ 只是坐进了算符。全文其余页面沿用归一化模型。
 
-```visual
-<svg viewBox="0 0 640 140" style="color:var(--ink);font-family:var(--sans)" font-size="13">
-  <defs><marker id="arP10" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-    <path d="M0,0 L8,4 L0,8 z" fill="var(--ink3)"/></marker></defs>
-  <rect x="30" y="40" width="150" height="56" rx="8" fill="oklch(0.95 0.04 55)" stroke="oklch(0.68 0.15 55)"/>
-  <text x="105" y="64" text-anchor="middle" fill="currentColor">源 f(x′)</text>
-  <text x="105" y="84" text-anchor="middle" fill="var(--ink3)" font-size="11">橙:切成小敲击</text>
-  <rect x="245" y="40" width="150" height="56" rx="8" fill="oklch(0.93 0.05 260)" stroke="oklch(0.5 0.14 260)"/>
-  <text x="320" y="64" text-anchor="middle" fill="currentColor">查表 G(x,x′)</text>
-  <text x="320" y="84" text-anchor="middle" fill="var(--ink3)" font-size="11">深蓝:单位敲击响应</text>
-  <rect x="460" y="40" width="150" height="56" rx="8" fill="var(--blue-bg)" stroke="var(--blue)"/>
-  <text x="535" y="64" text-anchor="middle" fill="currentColor">响应 u(x)</text>
-  <text x="535" y="84" text-anchor="middle" fill="var(--ink3)" font-size="11">蓝:全部相加</text>
-  <line x1="180" y1="68" x2="240" y2="68" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP10)"/>
-  <line x1="395" y1="68" x2="455" y2="68" stroke="var(--ink3)" stroke-width="1.6" marker-end="url(#arP10)"/>
-  <text x="320" y="124" text-anchor="middle" fill="var(--ink3)" font-size="12">这套"橙→深蓝→蓝"的流水线,从 P02 到 P17 不换色</text>
-</svg>
-```
-
-
-
 四个性质,逐条对应你已见过的东西:
 
 1. 源加倍 → 响应加倍($G$ 不变)。
 2. 源移动 → $G$ 的三角帆整体平移(在平移不变的域里,P11)。
-3. 两个源 → 两个响应相加(P09 的交互演示过)。
+3. 两个源 → 两个响应相加(P04 的交互演示过)。
 4. $f=\delta(x-x_0)$ 代回去 → $u(x)=G(x,x_0)$。**定义自动被公式包含。** [C005]
-
-一句话:这个积分就是"查表相加"的连续版。$G$ 是表,$f$ 是权重,$u$ 是总和。
 
 ```sources
 S2 S17
@@ -669,6 +718,31 @@ S2 S17
 
 ## P12 · 一个结构,四具身体
 
+
+```scene
+<b1>先看这台机器。三个位置:源(橙)→ 系统/核(深蓝)→ 响应(蓝)。它马上要换皮了。</b1>
+<b2>电荷→Laplace 核→电势(第一层皮在 P13)</b2>
+<svg viewBox="0 0 640 170" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <defs><marker id="arMP12" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="var(--ink3)"/></marker></defs>
+  <g data-beat="1">
+    <rect x="40" y="50" width="150" height="60" rx="10" fill="oklch(0.95 0.04 55)" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
+    <text x="115" y="86" text-anchor="middle" fill="currentColor">源</text>
+    <rect x="245" y="50" width="150" height="60" rx="10" fill="oklch(0.93 0.05 260)" stroke="oklch(0.5 0.14 260)" stroke-width="2"/>
+    <text x="320" y="86" text-anchor="middle" fill="currentColor">系统 / 核</text>
+    <rect x="450" y="50" width="150" height="60" rx="10" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="525" y="86" text-anchor="middle" fill="currentColor">响应</text>
+    <line x1="190" y1="80" x2="240" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP12)"/>
+    <line x1="395" y1="80" x2="445" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP12)"/>
+    <text x="320" y="150" text-anchor="middle" fill="var(--ink3)" font-size="11">三个位置永不移动;接下来几页只换里面的名字</text>
+  </g>
+  <g data-beat="2">
+    <text x="115" y="44" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="13">电荷</text>
+    <text x="320" y="44" text-anchor="middle" fill="oklch(0.5 0.14 260)" font-size="13">Laplace 核</text>
+    <text x="525" y="44" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="13">电势(第一层皮在 P13)</text>
+  </g>
+</svg>
+```
 同一套数学结构,在不同学科里各有名字。但它们的"亲疏"不同,分四级说才严谨:
 
 | 名字 | 领域 | "敲一下"是什么 | "响应"是什么 | 与 G 的关系 |
@@ -713,6 +787,32 @@ S3 S4 S17
 
 ## P13 · 静电学:你早就在用它
 
+
+```scene
+<b1>先看这台机器。三个位置:源(橙)→ 系统/核(深蓝)→ 响应(蓝)。它马上要换皮了。</b1>
+<b2>点电荷 q→静电核 K_φ→电势 φ</b2><b3>任意分布 = 叠加</b3>
+<svg viewBox="0 0 640 170" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <defs><marker id="arMP13" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="var(--ink3)"/></marker></defs>
+  <g data-beat="1">
+    <rect x="40" y="50" width="150" height="60" rx="10" fill="oklch(0.95 0.04 55)" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
+    <text x="115" y="86" text-anchor="middle" fill="currentColor">源</text>
+    <rect x="245" y="50" width="150" height="60" rx="10" fill="oklch(0.93 0.05 260)" stroke="oklch(0.5 0.14 260)" stroke-width="2"/>
+    <text x="320" y="86" text-anchor="middle" fill="currentColor">系统 / 核</text>
+    <rect x="450" y="50" width="150" height="60" rx="10" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="525" y="86" text-anchor="middle" fill="currentColor">响应</text>
+    <line x1="190" y1="80" x2="240" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP13)"/>
+    <line x1="395" y1="80" x2="445" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP13)"/>
+    <text x="320" y="150" text-anchor="middle" fill="var(--ink3)" font-size="11">三个位置永不移动;接下来几页只换里面的名字</text>
+  </g>
+  <g data-beat="2">
+    <text x="115" y="44" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="13">点电荷 q</text>
+    <text x="320" y="44" text-anchor="middle" fill="oklch(0.5 0.14 260)" font-size="13">静电核 K_φ</text>
+    <text x="525" y="44" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="13">电势 φ</text>
+  </g>
+  <g data-beat="3" data-obj="response"><text x="320" y="128" text-anchor="middle" fill="currentColor" font-size="14" font-family="var(--mono)">φ(r) = q·K_φ(r,r′)</text></g>
+</svg>
+```
 静电势满足 $-\nabla^2\phi=\rho/\varepsilon_0$。这里要区分**两个核**,混用是常见错误:
 
 **数学核(算符 $-\nabla^2$ 的格林函数)**——量纲 1/长度:
@@ -739,6 +839,32 @@ S2 S3
 
 ## P14 · 弹性力学:Kelvin 解与位错
 
+
+```scene
+<b1>先看这台机器。三个位置:源(橙)→ 系统/核(深蓝)→ 响应(蓝)。它马上要换皮了。</b1>
+<b2>点力 F→Kelvin 核 G_ij→位移 u</b2><b3>位错 = 本征应变卷积</b3>
+<svg viewBox="0 0 640 170" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <defs><marker id="arMP14" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="var(--ink3)"/></marker></defs>
+  <g data-beat="1">
+    <rect x="40" y="50" width="150" height="60" rx="10" fill="oklch(0.95 0.04 55)" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
+    <text x="115" y="86" text-anchor="middle" fill="currentColor">源</text>
+    <rect x="245" y="50" width="150" height="60" rx="10" fill="oklch(0.93 0.05 260)" stroke="oklch(0.5 0.14 260)" stroke-width="2"/>
+    <text x="320" y="86" text-anchor="middle" fill="currentColor">系统 / 核</text>
+    <rect x="450" y="50" width="150" height="60" rx="10" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="525" y="86" text-anchor="middle" fill="currentColor">响应</text>
+    <line x1="190" y1="80" x2="240" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP14)"/>
+    <line x1="395" y1="80" x2="445" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP14)"/>
+    <text x="320" y="150" text-anchor="middle" fill="var(--ink3)" font-size="11">三个位置永不移动;接下来几页只换里面的名字</text>
+  </g>
+  <g data-beat="2">
+    <text x="115" y="44" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="13">点力 F</text>
+    <text x="320" y="44" text-anchor="middle" fill="oklch(0.5 0.14 260)" font-size="13">Kelvin 核 G_ij</text>
+    <text x="525" y="44" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="13">位移 u</text>
+  </g>
+  <g data-beat="3" data-obj="response"><text x="320" y="128" text-anchor="middle" fill="currentColor" font-size="14" font-family="var(--mono)">u_i = G_ij·F_j</text></g>
+</svg>
+```
 把"敲一下"换成"在无限大弹性固体里,集中施加一个点力"。
 解出的位移场叫 **Kelvin 解**(1848)——弹性世界的 $1/4\pi r$。它就是弹性算符的格林函数。[C008]
 
@@ -759,6 +885,32 @@ S9 S8
 
 ## P15 · Si/SiGe:晶体管里的格林函数
 
+
+```scene
+<b1>先看这台机器。三个位置:源(橙)→ 系统/核(深蓝)→ 响应(蓝)。它马上要换皮了。</b1>
+<b2>本征应变 ε*→应力核(Jin 2009)→应力场 σ</b2><b3>SiGe 失配的快速估计</b3>
+<svg viewBox="0 0 640 170" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <defs><marker id="arMP15" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="var(--ink3)"/></marker></defs>
+  <g data-beat="1">
+    <rect x="40" y="50" width="150" height="60" rx="10" fill="oklch(0.95 0.04 55)" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
+    <text x="115" y="86" text-anchor="middle" fill="currentColor">源</text>
+    <rect x="245" y="50" width="150" height="60" rx="10" fill="oklch(0.93 0.05 260)" stroke="oklch(0.5 0.14 260)" stroke-width="2"/>
+    <text x="320" y="86" text-anchor="middle" fill="currentColor">系统 / 核</text>
+    <rect x="450" y="50" width="150" height="60" rx="10" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="525" y="86" text-anchor="middle" fill="currentColor">响应</text>
+    <line x1="190" y1="80" x2="240" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP15)"/>
+    <line x1="395" y1="80" x2="445" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP15)"/>
+    <text x="320" y="150" text-anchor="middle" fill="var(--ink3)" font-size="11">三个位置永不移动;接下来几页只换里面的名字</text>
+  </g>
+  <g data-beat="2">
+    <text x="115" y="44" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="13">本征应变 ε*</text>
+    <text x="320" y="44" text-anchor="middle" fill="oklch(0.5 0.14 260)" font-size="13">应力核(Jin 2009)</text>
+    <text x="525" y="44" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="13">应力场 σ</text>
+  </g>
+  <g data-beat="3" data-obj="response"><text x="320" y="128" text-anchor="middle" fill="currentColor" font-size="14" font-family="var(--mono)">σ = G ⊛ ε*</text></g>
+</svg>
+```
 你的领域,正面使用场景。
 
 **产业事实**:在 pMOS 源/漏嵌入压缩应变的 SiGe,提升空穴迁移率;
@@ -791,6 +943,32 @@ S19 S12 S9 S8
 
 ## P16 · 波与量子:因果性进入 G
 
+
+```scene
+<b1>先看这台机器。三个位置:源(橙)→ 系统/核(深蓝)→ 响应(蓝)。它马上要换皮了。</b1>
+<b2>脉冲 δ(t)→推迟核 G^ret→波前</b2><b3>因果约定在这一层进入</b3>
+<svg viewBox="0 0 640 170" style="color:var(--ink);font-family:var(--sans)" font-size="13">
+  <defs><marker id="arMP16" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="var(--ink3)"/></marker></defs>
+  <g data-beat="1">
+    <rect x="40" y="50" width="150" height="60" rx="10" fill="oklch(0.95 0.04 55)" stroke="oklch(0.68 0.15 55)" stroke-width="2"/>
+    <text x="115" y="86" text-anchor="middle" fill="currentColor">源</text>
+    <rect x="245" y="50" width="150" height="60" rx="10" fill="oklch(0.93 0.05 260)" stroke="oklch(0.5 0.14 260)" stroke-width="2"/>
+    <text x="320" y="86" text-anchor="middle" fill="currentColor">系统 / 核</text>
+    <rect x="450" y="50" width="150" height="60" rx="10" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="525" y="86" text-anchor="middle" fill="currentColor">响应</text>
+    <line x1="190" y1="80" x2="240" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP16)"/>
+    <line x1="395" y1="80" x2="445" y2="80" stroke="var(--ink3)" stroke-width="2" marker-end="url(#arMP16)"/>
+    <text x="320" y="150" text-anchor="middle" fill="var(--ink3)" font-size="11">三个位置永不移动;接下来几页只换里面的名字</text>
+  </g>
+  <g data-beat="2">
+    <text x="115" y="44" text-anchor="middle" fill="oklch(0.68 0.15 55)" font-size="13">脉冲 δ(t)</text>
+    <text x="320" y="44" text-anchor="middle" fill="oklch(0.5 0.14 260)" font-size="13">推迟核 G^ret</text>
+    <text x="525" y="44" text-anchor="middle" fill="oklch(0.55 0.13 250)" font-size="13">波前</text>
+  </g>
+  <g data-beat="3" data-obj="response"><text x="320" y="128" text-anchor="middle" fill="currentColor" font-size="14" font-family="var(--mono)">G^ret ∝ Θ(t−t′)</text></g>
+</svg>
+```
 给弦加上惯性:$L=\frac{\partial^2}{\partial t^2}-c^2\nabla^2$。它的 G 有**两支**:
 
 - **推迟格林函数**:响应只在源**之后**出现。敲一下,波纹向外扩,过去不受影响。

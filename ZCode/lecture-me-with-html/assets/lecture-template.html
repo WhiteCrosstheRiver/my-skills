@@ -6,7 +6,7 @@
 <title>{{TITLE}}</title>
 <style>
 /* ===== lecture-me-with-html · 设计血统:book-distiller 阅读器 =====
-   纸面 + 衬线正文 + mono 标号;核心单位是 page(一页一认知任务) */
+   纸面 + 衬线正文 + mono 标号;核心单位是 page,页内是 Scene→Beat */
 :root{
   --page:oklch(0.915 0.007 80);--paper:oklch(0.998 0.002 85);--line:oklch(0.82 0.01 80);
   --ink:oklch(0.15 0.01 60);--ink2:oklch(0.32 0.01 60);--ink3:oklch(0.45 0.01 60);
@@ -39,15 +39,18 @@ header{display:flex;align-items:center;gap:12px;padding:0 14px 0 18px;
 .htitle{min-width:0}
 .htitle .t1{font-family:var(--serif);font-weight:700;font-size:15px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.htitle .t2{font-size:12px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.htitle .t2{font-size:12px;color:oklch(0.28 0.01 60);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-mode="dark"] .htitle .t2{color:var(--ink3)}
 .hbtn{display:flex;align-items:center;gap:7px;height:34px;padding:0 12px;margin-left:0;
   border:1px solid var(--line);background:var(--paper);border-radius:8px;font-size:13px;
   color:var(--ink2);cursor:pointer;white-space:nowrap}
 .hbtn:hover{border-color:var(--ink3);color:var(--ink)}
-.hbtn.on{border-color:var(--amber);color:var(--amber)}
 .spacer{flex:1}
 .pcount{font-family:var(--mono);font-size:12px;color:var(--ink3);white-space:nowrap}
-@media(max-width:900px){.hbtn .lbl{display:none}.hbtn{padding:0 10px}}
+.bmeta{font-family:var(--mono);font-size:10px;color:var(--ink3);border:1px dashed var(--line);
+  border-radius:6px;padding:4px 8px;cursor:pointer;white-space:nowrap}
+.bmeta:hover{color:var(--ink);border-color:var(--ink3)}
+@media(max-width:900px){.hbtn .lbl{display:none}.hbtn{padding:0 10px}.bmeta{display:none}}
 
 /* ===== stage & pages ===== */
 main{position:relative;overflow:hidden}
@@ -88,18 +91,18 @@ h1.pt{font-family:var(--serif);font-size:26px;margin:8px 0 0}
 .callout{margin:1.2em 0;padding:13px 16px;border-left:4px solid var(--amber);
   background:var(--blue-bg);color:var(--blue-ink);border-radius:0 8px 8px 0;
   font-family:var(--sans);font-size:14px;line-height:1.8}
-.visual{margin:1.2em 0;text-align:center}
-.visual svg{max-width:100%;height:auto;color:var(--ink)}
 .warnbox{margin:1.2em 0;padding:13px 16px;border-left:4px solid var(--red);
   background:var(--red-bg);border-radius:0 8px 8px 0;font-family:var(--sans);font-size:14px;line-height:1.8}
+.visual{margin:1.2em 0;text-align:center}
+.visual svg{max-width:100%;height:auto;color:var(--ink)}
 
 /* ===== Scene → Beat 剧场 ===== */
-.scene{margin:1.1em 0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.scene{margin:1.1em 0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 16px;transition:opacity .3s}
 .capbar{display:flex;gap:14px;align-items:baseline;margin-bottom:10px;font-family:var(--sans);min-height:1.6em}
 .bcount{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--amber);white-space:nowrap}
 .bcap{display:none;font-size:15.5px;color:var(--ink);line-height:1.7}
 .bcap.on{display:inline}
-.stage{text-align:center}
+.stage{text-align:center;cursor:pointer}
 .stage svg{max-width:100%;height:auto;color:var(--ink)}
 .scene [data-beat]{opacity:0;transition:opacity .5s ease}
 .scene [data-beat].shown{opacity:1}
@@ -109,20 +112,31 @@ h1.pt{font-family:var(--serif);font-size:26px;margin:8px 0 0}
 .scene [data-fx="slide"].shown{transform:none}
 .scene [data-fx="growx"]{transform-box:fill-box;transform-origin:0% 50%;transform:scaleX(.04);transition:transform .55s ease, opacity .5s}
 .scene [data-fx="growx"].shown{transform:scaleX(1)}
-html[data-mode="dark"] .scene{background:var(--paper)}
-/* ===== Notes 严谨层 ===== */
+/* 未轮到的 scene 折叠;已放完的微降透明度 */
+.scene.pending{padding:7px 16px;opacity:.55}
+.scene.pending .stage,.scene.pending .bcap{display:none}
+.scene.pending .capbar{margin-bottom:0}
+.scene.past{opacity:.92}
+/* ===== Notes 严谨层(read 页内联;theater/derive 进抽屉) ===== */
 .notes{margin:1.1em 0;border:1px dashed var(--line);border-radius:8px;font-family:var(--sans);font-size:13.5px;line-height:1.8}
 .notes .ntag{cursor:pointer;padding:8px 12px;color:var(--ink3);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;user-select:none}
 .notes .ntag:hover{color:var(--ink)}
 .notes .nbody{display:none;padding:2px 16px 12px}
 .notes.open .nbody{display:block}
-/* ===== 模式:theater / derive ===== */
+.page[data-mode="theater"] .notes,.page[data-mode="derive"] .notes{display:none}
+body.notes-drawer .page.active .notes{display:block;position:fixed;right:10px;top:62px;
+  bottom:56px;width:min(380px,92vw);overflow-y:auto;z-index:35;margin:0;
+  background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:8px 14px}
+body.notes-drawer .page.active .notes .nbody{display:block}
+/* ===== 模式 ===== */
 .page[data-mode="theater"] .sheet{max-width:1020px}
 .page[data-mode="theater"] .bcap{font-size:17px}
 .page[data-mode="derive"] .sheet{max-width:960px}
-/* ===== Predict ===== */
+/* ===== Predict(时间线门控) ===== */
 .quiz.predict{border-left:4px solid var(--amber)}
 .quiz.predict .qtag{color:var(--amber)}
+.quiz.predict.armed{animation:pop .45s ease}
+@keyframes pop{0%{transform:scale(.97);opacity:0}100%{transform:scale(1);opacity:1}}
 
 /* sources chips & quiz */
 .srcs{margin-top:1.6em;padding-top:.8em;border-top:1px dashed var(--line);
@@ -154,14 +168,18 @@ html[data-mode="dark"] .quiz button{background:oklch(0.30 0.03 250);color:oklch(
 .lab .readout{font-family:var(--mono);font-size:11.5px;color:oklch(0.85 0.09 92)}
 
 /* ===== footer ===== */
-footer{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
-  gap:10px;padding:0 14px;border-top:1px solid var(--line);background:var(--paper)}
+footer{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;
+  align-items:center;padding:0 14px;border-top:1px solid var(--line);
+  background:var(--paper);font-size:13px}
 footer .prog{position:absolute;top:-1px;left:0;height:2px;background:var(--ink);width:0;transition:width .25s}
 .fbtn{border:1px solid var(--line);background:transparent;border-radius:8px;height:32px;
-  padding:0 16px;font-size:13px;color:var(--ink2);cursor:pointer}
+  padding:0 16px;font-size:13px;color:var(--ink2);cursor:pointer;white-space:nowrap}
 .fbtn:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
 .fbtn:disabled{opacity:.35;cursor:default}
-.fmid{font-family:var(--mono);font-size:12px;color:var(--ink3)}
+.fmid{font-family:var(--mono);font-size:11.5px;color:var(--ink3);text-align:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fmid .dots{letter-spacing:2px;color:var(--amber)}
+.fmid .cur{color:var(--ink)}
 
 /* ===== overlays ===== */
 .overlay{position:fixed;inset:0;background:oklch(0.2 0.02 60/.45);display:none;z-index:40}
@@ -192,8 +210,10 @@ footer .prog{position:absolute;top:-1px;left:0;height:2px;background:var(--ink);
   <div class="pcount" id="pcount">01 / {{TOTAL}}</div>
   <button class="hbtn" id="b-toc"><span class="lbl">目录</span>☰</button>
   <button class="hbtn" id="b-src"><span class="lbl">来源</span>§</button>
+  <button class="hbtn" id="b-notes"><span class="lbl">笔记</span>N</button>
   <button class="hbtn" id="b-mode"><span class="lbl">明暗</span>◐</button>
   <button class="hbtn" id="b-reset"><span class="lbl">重学</span>⟲</button>
+  <button class="bmeta" id="b-about">{{BUILDTAG}}</button>
 </header>
 <main id="stage">
 {{PAGES}}
@@ -220,6 +240,15 @@ footer .prog{position:absolute;top:-1px;left:0;height:2px;background:var(--ink);
     证据账本(dossier)为本页唯一事实源;每页底部 chips 指向该页实际引用。</p>
   </div>
 </div>
+<div class="overlay" id="ov-about">
+  <div class="panelbox">
+    <button class="close" data-close="ov-about">✕</button>
+    <h3>关于本构建(Build Provenance)</h3>
+    {{ABOUT}}
+    <p style="font-size:12px;color:var(--ink3);margin-top:14px;font-family:var(--sans)">
+    同名文件可能来自不同构建;以本面板为准。</p>
+  </div>
+</div>
 <script>
 "use strict";
 (function(){
@@ -228,48 +257,87 @@ footer .prog{position:absolute;top:-1px;left:0;height:2px;background:var(--ink);
   const KEY={{KEYJSON}};
   let cur=0;
   const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
-  /* ---- Scene→Beat 引擎:每页的拍是扁平列表,→ 先推拍,拍尽才翻页 ---- */
+  /* ---- Scene→Beat 引擎:→ 先推拍,拍尽才翻页 ---- */
   const pageScenes=pages.map(p=>[...p.querySelectorAll(".scene")]);
   const pageBeats=pages.map((p,pi)=>pageScenes[pi].reduce((a,s)=>a+(+s.dataset.beats||0),0));
-  let beatShown=pages.map(()=>1);      // 每页已揭示的拍数(最少 1)
+  const TOTAL_STEPS=pages.reduce((a,_,i)=>a+Math.max(1,pageBeats[i]),0);
+  let beatShown=pages.map((_,i)=>Math.max(1,pageBeats[i]||1));
+  function stepsDone(){let r=0;for(let i=0;i<pages.length;i++)r+=(i<cur?Math.max(1,pageBeats[i]):(i===cur?beatShown[cur]:0));return r;}
   function renderBeats(pi){
     let left=beatShown[pi];
     for(const sc of pageScenes[pi]){
       const K=+sc.dataset.beats||0;
       const local=clamp(left,0,K); left-=K;
+      sc.classList.toggle("pending",local===0&&K>0);
+      sc.classList.toggle("live",local>0&&local<K);
+      sc.classList.toggle("past",local>=K&&K>0);
       sc.querySelectorAll("[data-beat]").forEach(g=>{
-        g.classList.toggle("shown",+g.dataset.beat<=local);
+        const n=+g.dataset.beat, u=+(g.dataset.until||1e9);
+        g.classList.toggle("shown",local>=n&&local<=u);
       });
       sc.querySelectorAll(".bcap").forEach(c=>c.classList.toggle("on",+c.dataset.b===clamp(local,1,K)));
       const bc=sc.querySelector(".bcount");
-      if(bc)bc.textContent=local>=K?"BEAT "+K+"/"+K+" · 拍放完,→ 翻页":"BEAT "+Math.max(local,1)+"/"+K+" · 点击或按 → 继续";
+      if(bc)bc.textContent=local===0?"下一幕 · 待播放":(local>=K?"BEAT "+K+"/"+K+" · 拍放完,→ 翻页":"BEAT "+local+"/"+K+" · 点击或按 → 继续");
     }
+    /* predict 时间线门控 */
+    pages[pi].querySelectorAll(".predict[data-enter-beat]").forEach(q=>{
+      const n=+q.dataset.enterBeat;
+      const arm=beatShown[pi]>=n;
+      q.style.display=arm?"":"none";
+      if(arm&&!q.classList.contains("armed"))q.classList.add("armed");
+    });
   }
-  function forward(){ // 返回 true = 消耗了一拍
-    const total=pageBeats[cur];
-    if(beatShown[cur]<total){beatShown[cur]++;renderBeats(cur);
-      try{localStorage.setItem(KEY.beat,JSON.stringify(beatShown))}catch(_){}
-      return true;}
-    return false;
+  function updateChrome(){
+    const pc=String(cur+1).padStart(2,"0")+" / "+String(pages.length).padStart(2,"0");
+    $("#pcount").textContent=pc;
+    const M=pageBeats[cur],y=Math.min(beatShown[cur],M);
+    let dots="";
+    if(M>0){for(let i=1;i<=M;i++)dots+=i<=y?"●":"○";
+      $("#fmid").innerHTML="P"+String(cur+1).padStart(2,"0")+"/"+String(pages.length).padStart(2,"0")+
+        ' · <span class="dots">'+dots+"</span> · BEAT <span class='cur'>"+y+"</span>/"+M+
+        " · STEPS <span class='cur'>"+stepsDone()+"</span>/"+TOTAL_STEPS;}
+    else{$("#fmid").textContent="P"+String(cur+1).padStart(2,"0")+"/"+String(pages.length).padStart(2,"0")+
+      " · STEPS "+stepsDone()+"/"+TOTAL_STEPS;}
+    $("#prog").style.width=(stepsDone()/TOTAL_STEPS*100)+"%";
+    $("#b-prev").textContent=(beatShown[cur]>1)?"← 上一拍":"← 上一页";
+    $("#b-next").textContent=(M>0&&beatShown[cur]<M)?"下一拍 →":"下一页 →";
+    $("#b-prev").disabled=cur===0&&beatShown[cur]<=1;
+    $("#b-next").disabled=cur===pages.length-1&&!(M>0&&beatShown[cur]<M);
+    $$("#toc-list .tocitem").forEach((t,k)=>t.classList.toggle("cur",k===cur));
   }
-  function backward(){ // 返回 true = 回退了一拍
-    if(beatShown[cur]>1){beatShown[cur]--;renderBeats(cur);
-      try{localStorage.setItem(KEY.beat,JSON.stringify(beatShown))}catch(_){}
-      return true;}
-    return false;
+  function captureObjs(pi){
+    const m=new Map();
+    pages[pi].querySelectorAll("[data-obj-id]").forEach(el=>{
+      const r=el.getBoundingClientRect();
+      if(r.width&&r.height&&(el.classList.contains("shown")||!el.closest("[data-beat]")))m.set(el.dataset.objId,{x:r.x,y:r.y,w:r.width,h:r.height});
+    });
+    return m;
   }
-  function show(i,keep,dir){cur=clamp(i,0,pages.length-1);
+  function flip(oldMap,pi){
+    if(!oldMap||!oldMap.size)return;
+    pages[pi].querySelectorAll("[data-obj-id]").forEach(el=>{
+      const o=oldMap.get(el.dataset.objId); if(!o)return;
+      const r=el.getBoundingClientRect(); if(!r.width||!r.height)return;
+      const dx=o.x-r.x, dy=o.y-r.y;
+      if(Math.abs(dx)<2&&Math.abs(dy)<2&&Math.abs(o.w-r.width)<2)return;
+      el.style.transition="none";
+      el.style.transform=`translate(${dx}px,${dy}px)`;
+      requestAnimationFrame(()=>{el.style.transition="transform .5s cubic-bezier(.22,.9,.36,1)";
+        el.style.transform="";});
+    });
+  }
+  function show(i,keep,dir){
+    let oldMap=null;
+    if(dir)oldMap=captureObjs(cur);
+    cur=clamp(i,0,pages.length-1);
     pages.forEach((p,k)=>p.classList.toggle("active",k===cur));
     if(pageBeats[cur]>0){ if(dir==="back")beatShown[cur]=pageBeats[cur];
       else if(dir==="fwd")beatShown[cur]=1;
       renderBeats(cur); }
-    const pc=String(cur+1).padStart(2,"0")+" / "+String(pages.length).padStart(2,"0");
-    $("#pcount").textContent=pc;
-    $("#fmid").textContent="P"+String(cur+1).padStart(2,"0")+" · "+(pages[cur].dataset.foot||"");
-    $("#prog").style.width=((cur+1)/pages.length*100)+"%";
-    $("#b-prev").disabled=cur===0;$("#b-next").disabled=cur===pages.length-1;
+    updateChrome();
     $$("#toc-list .tocitem").forEach((t,k)=>t.classList.toggle("cur",k===cur));
     pages[cur].scrollTop=0;
+    if(dir)flip(oldMap,cur);
     if(!keep){try{localStorage.setItem(KEY.page,cur);
       localStorage.setItem(KEY.beat,JSON.stringify(beatShown))}catch(_){}}
     window.dispatchEvent(new CustomEvent("lecturepage",{detail:{index:cur,id:pages[cur].dataset.id}}));
@@ -285,9 +353,10 @@ footer .prog{position:absolute;top:-1px;left:0;height:2px;background:var(--ink);
     else if(e.key==="ArrowLeft"){e.preventDefault();prevOrBeat();}
     else if(e.key==="Home"){e.preventDefault();go(0,"fwd");}
     else if(e.key==="End"){e.preventDefault();go(pages.length-1,"back");}
-    else if(e.key==="Escape"){$$(".overlay").forEach(o=>o.classList.remove("open"));}
+    else if(e.key==="n"||e.key==="N"){document.body.classList.toggle("notes-drawer");}
+    else if(e.key==="Escape"){$$(".overlay").forEach(o=>o.classList.remove("open"));
+      document.body.classList.remove("notes-drawer");}
   });
-  /* 点场景画面 = 推进一拍 */
   $$(".scene .stage").forEach(st=>st.addEventListener("click",nextOrPage));
   /* overlays */
   function toggle(id){const o=document.getElementById(id);const was=o.classList.contains("open");
@@ -295,12 +364,14 @@ footer .prog{position:absolute;top:-1px;left:0;height:2px;background:var(--ink);
     if(!was)o.classList.add("open");}
   $("#b-toc").addEventListener("click",()=>toggle("ov-toc"));
   $("#b-src").addEventListener("click",()=>toggle("ov-src"));
+  $("#b-about").addEventListener("click",()=>toggle("ov-about"));
+  $("#b-notes").addEventListener("click",()=>document.body.classList.toggle("notes-drawer"));
   $$(".overlay .close").forEach(b=>b.addEventListener("click",()=>{
     document.getElementById(b.dataset.close).classList.remove("open")}));
   $$(".overlay").forEach(o=>o.addEventListener("click",e=>{
     if(e.target===o)o.classList.remove("open")}));
   $$("#toc-list .tocitem").forEach((t,k)=>t.addEventListener("click",()=>{
-    toggle("ov-toc");go(+t.dataset.i);}));
+    toggle("ov-toc");go(+t.dataset.i,"fwd");}));
   /* mode */
   function setMode(m){document.documentElement.dataset.mode=m;
     try{localStorage.setItem(KEY.mode,m)}catch(_){}}
@@ -311,7 +382,7 @@ footer .prog{position:absolute;top:-1px;left:0;height:2px;background:var(--ink);
     setMode(document.documentElement.dataset.mode==="light"?"dark":"light");});
   /* reset */
   $("#b-reset").addEventListener("click",()=>{
-    beatShown=pages.map(()=>1);renderBeats(cur);
+    beatShown=pages.map((_,i)=>Math.max(1,pageBeats[i]||1));renderBeats(cur);
     try{localStorage.removeItem(KEY.page);localStorage.removeItem(KEY.beat)}catch(_){}
     go(0,"fwd");});
   /* quiz */
@@ -329,13 +400,13 @@ footer .prog{position:absolute;top:-1px;left:0;height:2px;background:var(--ink);
   /* restore */
   let saved=0;try{saved=+localStorage.getItem(KEY.page)||0}catch(_){}
   try{const bs=JSON.parse(localStorage.getItem(KEY.beat)||"null");
-    if(Array.isArray(bs)&&bs.length===pages.length)beatShown=bs.map(x=>Math.max(1,+x||1));}catch(_){}
+    if(Array.isArray(bs)&&bs.length===pages.length)beatShown=bs.map((x,i)=>clamp(Math.max(1,+x||1),1,Math.max(1,pageBeats[i]||1)));}catch(_){}
   const qp=new URLSearchParams(location.search);
   if(qp.get("p")&&+qp.get("p")>=1&&+qp.get("p")<=pages.length)saved=+qp.get("p")-1;
   const qb=+qp.get("b");
   if(qb>=1)beatShown[clamp(saved,0,pages.length-1)]=qb;
   show(clamp(saved,0,pages.length-1),true);
-  /* Notes 严谨层开关 */
+  /* Notes 折叠条(read 模式) */
   $$(".notes .ntag").forEach(t=>t.addEventListener("click",()=>{
     t.parentElement.classList.toggle("open");}));
 })();

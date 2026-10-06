@@ -4,6 +4,7 @@
 // 设计血统:book-distiller 阅读器 tokens;数学离线(字体内联)。
 // 用法: node lecture.mjs build lecture.md -o out.html [--lint-only] [--no-open]
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +23,26 @@ if (cmd !== "build" || !args[1]) {
   process.exit(cmd === "help" ? 0 : 1);
 }
 const SRC = resolve(args[1]);
-const OUT = resolve(argOf("-o") || basename(SRC).replace(/\.md$/i, ".html"));
+const VERSION = "RC4";
+const BUILD_TS = new Date().toISOString();
+function shortHash(s) { return createHash("sha256").update(s).digest("hex").slice(0, 12); }
+function gitShort() {
+  for (const dir of [dirname(SRC), process.cwd(), SCRIPT_DIR]) {
+    try { return execSync("git rev-parse --short HEAD", { cwd: dir, stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch (_) {}
+  }
+  return "nogit";
+}
+const GIT = gitShort();
+const sha256 = (f) => existsSync(f) ? createHash("sha256").update(readFileSync(f)).digest("hex") : "n/a";
+const DOSSIER = argOf("--dossier");
+const DOS_SHA_FULL = DOSSIER && existsSync(DOSSIER) ? sha256(DOSSIER) : "n/a";
+let OUT = argOf("-o");
+if (!OUT) {
+  const slug = basename(SRC).replace(/\.md$/i, "");
+  OUT = slug + `_v${VERSION}_${GIT}.html`;
+}
+OUT = resolve(OUT);
+const LEC_SHA = shortHash(readFileSync(SRC).toString());
 
 /* ---------- katex (optional, degrade gracefully) ---------- */
 function loadKatex() {
@@ -267,7 +287,13 @@ const pagesHtml = pages.map((p, i) => {
     else if (s.kind === "visual" || s.kind === "svg") rep = `<div class="visual">${s.blk}</div>`;
     else if (s.kind === "scene") rep = parseScene(s.blk);
     else if (s.kind === "notes") rep = parseNotes(s.blk);
-    else if (s.kind === "predict") { const q = parseQuiz(s.blk, p.id, ++qn); rep = q.replace('class="quiz"', 'class="quiz predict"').replace(/SELF TEST/, "PREDICT · 先猜再看"); }
+    else if (s.kind === "predict") {
+      let q = parseQuiz(s.blk, p.id, ++qn);
+      q = q.replace('class="quiz"', 'class="quiz predict"').replace(/SELF TEST/, "PREDICT · 先猜再看");
+      const am = (s.info || "").match(/after=(\d+)/);
+      if (am) q = q.replace('class="quiz predict"', `class="quiz predict" data-enter-beat="${am[1]}" style="display:none"`);
+      rep = q;
+    }
     else if (s.kind === "bib") rep = "";
     html = html.replace("\x00F" + slots.indexOf(s) + "\x00", rep);
   }
@@ -329,10 +355,14 @@ const html = template
   .replace("{{TOC}}", tocHtml)
   .replace("{{ALLSOURCES}}", srcHtml)
   .replace("{{MATH_CSS}}", mathCss())
+  .replace("{{BUILDTAG}}", `${VERSION} · ${GIT}`)
+  .replace("{{ABOUT}}", [
+    ["skill", "lecture-me-with-html"], ["version", VERSION], ["git commit", GIT],
+    ["lecture.md sha256", sha256(SRC)], ["dossier sha256", DOS_SHA_FULL], ["built", BUILD_TS]
+  ].map(([k, v]) => `<div class="srcitem"><span class="sid">${k}</span>${esc(String(v))}</div>`).join(""))
   .replace("{{KEYJSON}}", JSON.stringify({ page: "lecture:" + (meta.title || "x") + ":page", mode: "lecture:" + (meta.title || "x") + ":mode", beat: "lecture:" + (meta.title || "x") + ":beats" }));
 
 /* ---------- dossier audit (--dossier) ---------- */
-const DOSSIER = argOf("--dossier");
 const claims = new Map(); // id -> {sources:[], conf, used:[]}
 const dossierSources = new Set();
 if (DOSSIER) {
@@ -426,6 +456,22 @@ if (flag("--lint-only")) {
 }
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, html);
+/* build provenance manifest */
+const pageBeatsList = pages.map(p => {
+  let b = 0;
+  for (const sm of p.md.matchAll(/```scene[^\n]*\n([\s\S]*?)```/g)) {
+    let mx = 0; for (const m of sm[1].matchAll(/data-beat="(\d+)"/g)) mx = Math.max(mx, +m[1]);
+    for (const m of sm[1].matchAll(/<b(\d+)>/g)) mx = Math.max(mx, +m[1]);
+    b += mx;
+  }
+  return { id: p.id, title: p.title, mode: (p.opts && p.opts.mode) || "read", beats: b };
+});
+writeFileSync(OUT.replace(/\.html$/i, "") + ".manifest.json", JSON.stringify({
+  skill: "lecture-me-with-html", version: VERSION, git: GIT, built: BUILD_TS,
+  lecture: { file: basename(SRC), sha256: sha256(SRC) },
+  dossier: DOSSIER ? { file: basename(DOSSIER), sha256: DOS_SHA_FULL } : null,
+  pages: pageBeatsList
+}, null, 2));
 const kb = Math.round(html.length / 1024);
 console.log(`✓ ${OUT}`);
 console.log(`  ${statLine()} · ${kb} KB · 数学:${KATEX ? "KaTeX 服务端渲染(离线)" : "降级为等宽块(未安装 katex)"}`);

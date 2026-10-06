@@ -1,0 +1,142 @@
+{
+  "skill": "lecture-me-with-html",
+  "version": "RC4",
+  "git": "8d1a9b3",
+  "built": "2026-10-06T03:24:32.652Z",
+  "lecture": {
+    "file": "lecture.md",
+    "sha256": "ec68a4402611c3314a44e3cc5b9e3d6d86fe7bd168d6fed8ccbecae659cb3aee"
+  },
+  "dossier": {
+    "file": "dossier.md",
+    "sha256": "eb6a6b252bc2cf8b0044d2566a58ed643f1dbadd55ffcd02b818f0992e640845"
+  },
+  "pages": [
+    {
+      "id": "P01",
+      "title": "先别看任何方程:敲一下,会发生什么?",
+      "mode": "theater",
+      "beats": 4
+    },
+    {
+      "id": "P02",
+      "title": "最简单的问题:两个弹簧",
+      "mode": "theater",
+      "beats": 3
+    },
+    {
+      "id": "P03",
+      "title": "把\"单位敲击\"记下来:矩阵逆的真面目",
+      "mode": "theater",
+      "beats": 7
+    },
+    {
+      "id": "P04",
+      "title": "任意源 = 一排单位敲击",
+      "mode": "theater",
+      "beats": 5
+    },
+    {
+      "id": "P05",
+      "title": "从两个自由度到一根连续的弦",
+      "mode": "theater",
+      "beats": 4
+    },
+    {
+      "id": "P06",
+      "title": "Formula Anatomy:G(x, x') 每个符号是什么",
+      "mode": "read",
+      "beats": 0
+    },
+    {
+      "id": "P07",
+      "title": "现在,LG = δ 才自然出现",
+      "mode": "derive",
+      "beats": 5
+    },
+    {
+      "id": "P08",
+      "title": "边界条件:G 是一族函数,不是一条",
+      "mode": "read",
+      "beats": 0
+    },
+    {
+      "id": "P09",
+      "title": "完整例题:两端固定弦,一算到底",
+      "mode": "derive",
+      "beats": 5
+    },
+    {
+      "id": "P10",
+      "title": "普遍公式:积分是从求和里长出来的",
+      "mode": "derive",
+      "beats": 5
+    },
+    {
+      "id": "P11",
+      "title": "平移不变的世界:卷积与傅里叶",
+      "mode": "derive",
+      "beats": 5
+    },
+    {
+      "id": "P12",
+      "title": "一个结构,四具身体",
+      "mode": "read",
+      "beats": 2
+    },
+    {
+      "id": "P13",
+      "title": "静电学:你早就在用它",
+      "mode": "read",
+      "beats": 3
+    },
+    {
+      "id": "P14",
+      "title": "弹性力学:Kelvin 解与位错",
+      "mode": "read",
+      "beats": 3
+    },
+    {
+      "id": "P15",
+      "title": "Si/SiGe:晶体管里的格林函数",
+      "mode": "read",
+      "beats": 3
+    },
+    {
+      "id": "P16",
+      "title": "波与量子:因果性进入 G",
+      "mode": "read",
+      "beats": 3
+    },
+    {
+      "id": "P17",
+      "title": "NEGF:量子器件的日常工具",
+      "mode": "read",
+      "beats": 0
+    },
+    {
+      "id": "P18",
+      "title": "什么时候不能用",
+      "mode": "read",
+      "beats": 0
+    },
+    {
+      "id": "P19",
+      "title": "数值化:没有闭式,就自己造一张表",
+      "mode": "read",
+      "beats": 0
+    },
+    {
+      "id": "P20",
+      "title": "前沿(2023–2026)",
+      "mode": "read",
+      "beats": 0
+    },
+    {
+      "id": "P21",
+      "title": "我学会了吗?",
+      "mode": "read",
+      "beats": 0
+    }
+  ]
+}
