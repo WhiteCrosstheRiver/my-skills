@@ -1,20 +1,35 @@
 # -*- coding: utf-8 -*-
 """通用蒸馏书 HTML 构建器(风格同悉达多)
-用法: python build_book.py <ir_dir> <distill.json> <out.html> [title] [subtitle]
-distill.json schema:
+用法: python build_book.py <ir_dir> <distill.json> <out.html> [title] [subtitle] [--force] [--legacy]
+distill.json schema (check_distill.py 的文档为准):
 {
- "subtitle": str?, "author": str?, "en": bool?,           # en: 章标题是否英文书
- "entry":  {"<chapterIndex0based>": {"q":str,"route":[...],"keys":[...],"motif":str,"time":min}},
- "notes":  {"<chapterIndex0based>": [[at_para_idx,"TAG","text",("deeper")], ...]},
- "quiz":   {"<chapterIndex0based>": {"q":str,"a":[..]|str,"correct":int?,"fb":str}},
+ "subtitle": str?,
+ "entry":  {"<chapterIndex0based>": {"q":str,"route":[...],"keys":[str | {"text":str,"at":para}],"motif":str,"time":min}},
+ "notes":  {"<chapterIndex0based>": [{"at":para,"tag":"KEY","text":str,"deeper":str?,"quote":"原文子串"}  # 或旧式 [at,"TAG","text","deeper"]
+ "quiz":   {"<chapterIndex0based>": {"q":str,"a":[..]|str,"correct":int?,"fb":str} 或其列表},
  "concepts":[{"id","name","en","one","first":[chIdx,paraIdx],"rel":[...]}]
 }
+构建前先跑 check_distill;有 error 时拒绝构建(--force 跳过,--legacy 允许无 quote 的旧蒸馏稿)。
 """
-import json, sys, os, io, re
+import json, sys, os, io, re, html as _html
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8", errors="replace")
 
+_flags = {a for a in sys.argv[1:] if a.startswith("--")}
+sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if not a.startswith("--")]
 ir_dir, distill_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
 book = json.load(open(os.path.join(ir_dir, "book.json"), encoding="utf8"))
 D = json.load(open(distill_path, encoding="utf8")) if os.path.exists(distill_path) else {}
+if D and "--force" not in _flags:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from check_distill import check as _check
+    _errs, _warns, _stats = _check(book, D, legacy="--legacy" in _flags)
+    for w in _warns:
+        print("warning:", w, file=sys.stderr)
+    if _errs:
+        print("distill.json has errors (fix them, or --force / --legacy):\n  " + "\n  ".join(_errs[:40]), file=sys.stderr)
+        sys.exit(1)
 
 TEMPLATE = r"""<!DOCTYPE html>
 <html lang="zh">
@@ -61,7 +76,10 @@ article{max-width:760px;margin:34px auto 60px;padding:56px 64px;background:oklch
 .chhead{padding-bottom:.6em}
 .chhead .kicker{font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.14em;color:oklch(0.28 0.01 60)}
 .chhead h1{font-size:1.9em;line-height:1.3;margin:.3em 0 .1em;font-weight:700}
-.para{margin:0 0 1.15em;text-indent:2em;text-align:justify;position:relative}
+.para{margin:0 0 1.15em;text-indent:2em;text-align:justify;position:relative;white-space:pre-line}
+.para.subhead{text-indent:0;font-weight:700;font-size:1.12em;margin:1.6em 0 .8em;text-align:left}
+.mnotes{display:grid;gap:0;align-self:start}
+.para.frag{text-indent:0;font-family:'IBM Plex Mono',monospace;font-size:.72em;line-height:1.5;color:oklch(0.5 0.01 60);text-align:left}
 .para .pmark{position:absolute;left:-1.6em;top:.55em;font-family:'IBM Plex Mono',monospace;font-size:11px;color:oklch(0.72 0.01 60)}
 .para:hover .pmark{color:oklch(0.5 0.12 250)}
 .hl{background:oklch(0.89 0.14 92);border-radius:2px;padding:0 1px}
@@ -170,14 +188,15 @@ const BOOK=JSON.parse(document.getElementById("bookdata").textContent);
 const CONCEPTS=BOOK.concepts||[];
 const LS="db:"+BOOK.slug+":";
 const $=s=>document.querySelector(s);
-let state={mode:localStorage.getItem(LS+"mode")||"enhanced",ch:+(localStorage.getItem(LS+"ch")||0),
-  bm:new Set(JSON.parse(localStorage.getItem(LS+"bm")||"[]")),
-  hls:JSON.parse(localStorage.getItem(LS+"hl")||"[]"),
-  scroll:JSON.parse(localStorage.getItem(LS+"scroll")||"{}"),
-  fs:+(localStorage.getItem(LS+"fs")||17.5)};
-function save(){localStorage.setItem(LS+"mode",state.mode);localStorage.setItem(LS+"ch",state.ch);
-  localStorage.setItem(LS+"bm",JSON.stringify([...state.bm]));localStorage.setItem(LS+"hl",JSON.stringify(state.hls));
-  localStorage.setItem(LS+"scroll",JSON.stringify(state.scroll));localStorage.setItem(LS+"fs",state.fs);}
+// Storage may be unavailable (data:/sandboxed viewers, private mode): the book must still render.
+const MEM={};const ST={get(k){try{return localStorage.getItem(k);}catch(e){return k in MEM?MEM[k]:null;}},
+  set(k,v){try{localStorage.setItem(k,v);}catch(e){MEM[k]=String(v);}}};
+const J=(k,d)=>{try{return JSON.parse(ST.get(k)||d);}catch(e){return JSON.parse(d);}};
+let state={mode:ST.get(LS+"mode")||"enhanced",ch:+(ST.get(LS+"ch")||0),
+  bm:new Set(J(LS+"bm","[]")),hls:J(LS+"hl","[]"),scroll:J(LS+"scroll","{}"),fs:+(ST.get(LS+"fs")||17.5)};
+function save(){ST.set(LS+"mode",state.mode);ST.set(LS+"ch",state.ch);
+  ST.set(LS+"bm",JSON.stringify([...state.bm]));ST.set(LS+"hl",JSON.stringify(state.hls));
+  ST.set(LS+"scroll",JSON.stringify(state.scroll));ST.set(LS+"fs",state.fs);}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const IMGPRE="__IMGPRE__";
 let IMG={};try{IMG=JSON.parse(document.getElementById("imgdata").textContent||"{}")}catch(e){}
@@ -191,25 +210,27 @@ function markTerms(text){
   for(const[i,nm,c]of hits){if(i<pos)continue;out+=esc(text.slice(pos,i));
     out+='<span class="term" data-term="'+c.id+'">'+esc(nm)+'</span>';pos=i+nm.length;}
   out+=esc(text.slice(pos));return hits.length?out:esc(text);}
+const HEADS={};
 function paraEl(ch,i,p,enh){
-  const note=enh?(ch.notes||[]).find(n=>n.at===i):null;
+  const notes=enh?(ch.notes||[]).filter(n=>n.at===i):[];
   let inner=enh?markTerms(p):esc(p);
-  const hl=state.hls.find(h=>h.ch===ch.idx&&h.p===i);
-  let para='<p class="para" id="p-'+ch.idx+'-'+i+'" data-ch="'+ch.idx+'" data-p="'+i+'"><span class="pmark">'+String(i+1)+'</span>'+inner+'</p>';
-  if(note){para='<div class="withnote">'+para+'<aside class="mnote ai-only"><span class="tag">AI · '+esc(note.tag)+'</span><span>'+esc(note.text)+'</span>'+
-    (note.deeper?'<button class="why" onclick="this.closest(\'.mnote\').classList.toggle(\'open\');event.stopPropagation()">Deeper ▸</button><span class="deep">'+esc(note.deeper)+'</span>':'')+'</aside></div>';}
+  const isHead=(HEADS[ch.idx]||(HEADS[ch.idx]=new Set(ch.heads||[]))).has(i);
+  let para='<p class="para'+(isHead?' subhead':'')+((ch.frags||[]).includes(i)?' frag':'')+'" id="p-'+ch.idx+'-'+i+'" data-ch="'+ch.idx+'" data-p="'+i+'"><span class="pmark">'+String(i+1)+'</span>'+inner+'</p>';
+  if(notes.length){para='<div class="withnote">'+para+'<div class="mnotes">'+notes.map(note=>'<aside class="mnote ai-only"><span class="tag">AI · '+esc(note.tag)+'</span><span>'+esc(note.text)+'</span>'+
+    (note.deeper?'<button class="why" onclick="this.closest(\'.mnote\').classList.toggle(\'open\');event.stopPropagation()">Deeper ▸</button><span class="deep">'+esc(note.deeper)+'</span>':'')+'</aside>').join('')+'</div></div>';}
   return para;}
 function renderTOC(){
   const el=$("#toc");let h='<div class="navlabel">CONTENTS · 目录</div>';
   BOOK.chapters.forEach((ch,idx)=>{
     const cur=idx===state.ch,bmd=state.bm.has(idx);
-    h+='<button class="toc-ch'+(cur?' active':'')+'" data-i="'+idx+'"><span class="n">'+(idx+1)+'</span><span style="flex:1;text-align:left">'+esc(ch.title)+'</span>'+(ch.entry?'<span class="mono" style="font-size:10px;color:oklch(0.42 0.01 60)">~'+ch.entry.time+'m</span>':'')+(bmd?'<span class="diamond"></span>':'')+'</button>';
+    h+='<button class="toc-ch'+(cur?' active':'')+'" data-i="'+idx+'"><span class="n">'+(idx+1)+'</span><span style="flex:1;text-align:left">'+esc(ch.title)+'</span>'+(ch.entry&&ch.entry.time?'<span class="mono" style="font-size:10px;color:oklch(0.42 0.01 60)">~'+ch.entry.time+'m</span>':'')+(bmd?'<span class="diamond"></span>':'')+'</button>';
     if(cur){h+='<button class="toc-sub" data-goto="p-'+idx+'-0">本章开头 · ¶1</button>';
-      const step=ch.paras.length>200?50:12;
-      for(let i=step;i<ch.paras.length;i+=step)h+='<button class="toc-sub" data-goto="p-'+idx+'-'+i+'">¶'+(i+1)+'</button>';
+      if(ch.heads&&ch.heads.length){ch.heads.slice(0,60).forEach(i=>{h+='<button class="toc-sub" data-goto="p-'+idx+'-'+i+'">'+esc(String(ch.paras[i]).slice(0,22))+'</button>';});}
+      else{const step=ch.paras.length>200?50:12;
+        for(let i=step;i<ch.paras.length;i+=step)h+='<button class="toc-sub" data-goto="p-'+idx+'-'+i+'">¶'+(i+1)+'</button>';}
       if(ch.entry)h+='<button class="toc-sub" data-goto="ch-entry">章导读 · AI</button>';
       if(ch.quiz)h+='<button class="toc-sub" data-goto="quiz">自测 · AI</button>';}});
-  const pct=Math.round((state.ch)/(BOOK.chapters.length-1)*100);
+  const pct=BOOK.chapters.length>1?Math.round((state.ch)/(BOOK.chapters.length-1)*100):100;
   h+='<div class="toc-foot"><div class="row"><span>BOOK</span><span>'+pct+'%</span></div><div class="bar"><div style="width:'+pct+'%"></div></div><div style="font-size:12px;color:oklch(0.28 0.01 60)">共 '+BOOK.chapters.length+' 章 · '+BOOK.total_paras+' 段</div></div>';
   el.innerHTML=h;
   el.querySelectorAll(".toc-ch").forEach(b=>b.onclick=()=>goto(+b.dataset.i,null));
@@ -224,21 +245,25 @@ function render(){
   const imAfter={};(ch.images||[]).forEach(e=>{(imAfter[e.after]=imAfter[e.after]||[]).push(e);});
   (imAfter[-1]||[]).forEach(e=>{h+=figHTML(e);});
   if(enh&&ch.entry){const e=ch.entry;
-    h+='<section class="entry ai-only" id="ch-entry"><div class="top"><span>AI DISTILLED · 本章导读</span><span>≈ '+e.time+' min · '+ch.paras.length+' 段</span></div>'+
-    '<div><h3>这一章要回答什么</h3>'+esc(e.q)+'</div>'+
-    '<div><h4>Knowledge route · 知识路线</h4><div class="route">'+e.route.map((r,i)=>'<span>'+esc(r)+'</span>'+(i<e.route.length-1?'<i>→</i>':'')).join('')+'</div></div>'+
-    '<div><h4>Key points · 关键点</h4><div class="keys">'+e.keys.map((k,i)=>'<span class="k">'+(i+1)+'</span><span>'+esc(k)+'</span>').join('')+'</div></div>'+
+    const route=e.route||[],keys=e.keys||[];
+    h+='<section class="entry ai-only" id="ch-entry"><div class="top"><span>AI DISTILLED · 本章导读</span><span>'+(e.time?'≈ '+e.time+' min · ':'')+ch.paras.length+' 段</span></div>'+
+    '<div><h3>这一章要回答什么</h3>'+esc(e.q||'')+'</div>'+
+    (route.length?'<div><h4>Knowledge route · 知识路线</h4><div class="route">'+route.map((r,i)=>'<span>'+esc(r)+'</span>'+(i<route.length-1?'<i>→</i>':'')).join('')+'</div></div>':'')+
+    (keys.length?'<div><h4>Key points · 关键点</h4><div class="keys">'+keys.map((k,i)=>{const t=typeof k==="object"?k.text:k,at=typeof k==="object"?k.at:null;
+      return '<span class="k">'+(i+1)+'</span><span>'+esc(t)+(at!=null?' <button class="linkish" onclick="document.getElementById(\'p-'+ch.idx+'-'+at+'\').scrollIntoView({behavior:\'smooth\'})">¶'+(at+1)+' ↓</button>':'')+'</span>';}).join('')+'</div></div>':'')+
     (e.motif?'<div style="font-size:13px"><h4>Theme · 补充</h4>'+esc(e.motif)+'</div>':'')+
     '<div class="foot"><span style="font-size:12px;color:oklch(0.42 0.15 250)">AI 内容与原文隔离 · 虚线词可看概念卡</span><button class="gostart" onclick="document.getElementById(\'p-'+ch.idx+'-0\').scrollIntoView()">开始读原文 ↓</button></div></section>';}
   for(let i=0;i<ch.paras.length;i++){h+=paraEl(ch,i,ch.paras[i],enh);(imAfter[i]||[]).forEach(e=>{h+=figHTML(e);});}
-  if(mode==="study"&&ch.quiz){const q=ch.quiz;
-    h+='<section class="quiz ai-only" id="quiz"><div class="tag">STUDY · 自测 Self-check</div><div style="font-weight:600">'+esc(q.q)+'</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+
+  const QZ=ch.quiz?(Array.isArray(ch.quiz)?ch.quiz:[ch.quiz]):[];
+  if(mode==="study")QZ.forEach((q,qi)=>{
+    h+='<section class="quiz ai-only"'+(qi===0?' id="quiz"':'')+' data-q="'+qi+'"><div class="tag">STUDY · 自测 Self-check'+(QZ.length>1?' '+(qi+1)+'/'+QZ.length:'')+'</div><div style="font-weight:600">'+esc(q.q)+'</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+
       (Array.isArray(q.a)?q.a.map((a,i)=>'<button data-i="'+i+'">'+esc(a)+'</button>').join(''):'<button data-i="0">'+esc(q.a)+'</button>')+
-      '</div><div class="fb">'+esc(q.fb)+'</div></section>';}
+      '</div><div class="fb">'+esc(q.fb||'')+'</div></section>';});
   h+='<div class="endrow"><span>'+esc(ch.title)+' · 完</span><span class="mono" style="font-size:12px">'+(state.ch<BOOK.chapters.length-1?"Next · "+esc(BOOK.chapters[state.ch+1].title)+" →":"The End")+'</span></div>';
   $("#article").innerHTML=h;
+  state.hls.filter(x=>x.ch===ch.idx).forEach(x=>{const el=document.getElementById("p-"+x.ch+"-"+x.p);if(el)try{applyHlIn(el,x);}catch(e){}});
   document.querySelectorAll(".quiz").forEach(qz=>{qz.querySelectorAll("button").forEach(b=>b.onclick=()=>{
-    const q=ch.quiz;if(Array.isArray(q.a)){const ok=+b.dataset.i===q.correct;
+    const q=QZ[+qz.dataset.q];if(Array.isArray(q.a)){const ok=+b.dataset.i===q.correct;
       qz.querySelectorAll("button").forEach(x=>{x.disabled=true;if(+x.dataset.i===q.correct)x.classList.add("ok");});
       if(!ok)b.classList.add("no");}
     qz.classList.add("done");});});
@@ -302,15 +327,15 @@ function showConcept(id,el){const c=CONCEPTS.find(x=>x.id===id);if(!c)return;hid
   const d=document.createElement("div");d.className="floatcard";d.id="cfloat";
   d.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><span class="nm">'+esc(c.name)+' <span class="mono" style="font-size:11.5px;font-weight:400;color:oklch(0.36 0.05 250)">'+esc(c.en||"")+'</span></span><span class="ai">AI · CONCEPT</span></div>'+
    '<div>'+esc(c.one)+'</div>'+
-   '<div style="display:flex;gap:8px;font-size:12.5px"><span style="color:oklch(0.36 0.04 250)">首次出现</span><button class="linkish" id="cffirst">第 '+(c.first[0]+1)+' 章 ¶'+(c.first[1]+1)+'</button></div>'+
-   '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12.5px"><span style="color:oklch(0.36 0.04 250)">Related</span>'+c.rel.map(r=>'<span class="chip">'+esc(r)+'</span>').join('')+'</div>';
+   (c.first?'<div style="display:flex;gap:8px;font-size:12.5px"><span style="color:oklch(0.36 0.04 250)">首次出现</span><button class="linkish" id="cffirst">第 '+(c.first[0]+1)+' 章 ¶'+(c.first[1]+1)+'</button></div>':'')+
+   ((c.rel||[]).length?'<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12.5px"><span style="color:oklch(0.36 0.04 250)">Related</span>'+c.rel.map(r=>'<span class="chip">'+esc(r)+'</span>').join('')+'</div>':'');
   document.body.appendChild(d);
   const r=el.getBoundingClientRect();
   let x=Math.min(r.left,innerWidth-320),y=r.bottom+8;
   if(y+d.offsetHeight>innerHeight-10)y=r.top-d.offsetHeight-8;
   d.style.left=Math.max(8,x)+"px";d.style.top=Math.max(8,y)+"px";
   d.addEventListener("mouseleave",hideFloat);
-  d.querySelector("#cffirst").onclick=()=>{goto(c.first[0],c.first[1]);hideFloat();};}
+  const ff=d.querySelector("#cffirst");if(ff)ff.onclick=()=>{goto(c.first[0],c.first[1]);hideFloat();};}
 function hideFloat(){const f=document.getElementById("cfloat");if(f)f.remove();}
 let stab="exact";
 function openSearch(){let sc=$(".scrim");if(sc)sc.remove();
@@ -333,7 +358,7 @@ function runSearch(q,sc){const res=sc.querySelector("#res"),rc=sc.querySelector(
         html+='<button class="res" data-ch="'+idx+'" data-p="'+i+'"><div class="r1">第'+(idx+1)+'章 '+esc(ch.title)+' · ¶'+(i+1)+'</div><div class="r2">…'+esc(p.slice(s,li))+'<mark>'+esc(p.substr(li,needle.length))+'</mark>'+esc(p.slice(li+needle.length,li+needle.length+60))+'…</div></button>';}});
     });}
   else{const needle=q.trim().toLowerCase();
-    CONCEPTS.forEach(c=>{if((c.name+(c.en||"")+c.one+c.rel.join("")).toLowerCase().includes(needle)&&n<40){n++;
+    CONCEPTS.forEach(c=>{if(c.first&&(c.name+(c.en||"")+(c.one||"")+(c.rel||[]).join("")).toLowerCase().includes(needle)&&n<40){n++;
       html+='<button class="res" data-ch="'+c.first[0]+'" data-p="'+c.first[1]+'"><div class="r1">CONCEPT · '+esc(c.name)+' '+esc(c.en||"")+'</div><div class="r2">'+esc(c.one)+'</div></button>';}});}
   rc.textContent=n+" results";res.innerHTML=html||'<div class="empty" style="padding:10px">无结果。</div>';
   res.querySelectorAll(".res").forEach(b=>b.onclick=()=>{sc.remove();goto(+b.dataset.ch,+b.dataset.p);});}
@@ -360,7 +385,7 @@ function openNotes(){let d=$(".drawer");if(d){d.remove();return;}
   d.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{state.hls=state.hls.filter(x=>x.id!=+b.dataset.del);save();d.remove();openNotes();render();});
   d.querySelectorAll("textarea").forEach(t=>t.oninput=()=>{const hl=state.hls.find(x=>x.id==+t.dataset.hl);if(hl){hl.note=t.value;save();$("#hlcount").textContent=state.hls.length;}});}
 $("#btnNotes").onclick=openNotes;
-state.ch=Math.min(state.ch,BOOK.chapters.length-1);
+state.ch=Math.max(0,Math.min(state.ch|0,BOOK.chapters.length-1));
 render();
 </script>
 </body>
@@ -375,9 +400,8 @@ def main():
         chapters.append({
             "idx": i, "title": c["title"], "paras": c["paras"],
             "entry": entry.get(str(i)), "quiz": quiz.get(str(i)),
-            "images": c.get("images"),
-            "notes": [{"at": n[0], "tag": n[1], "text": n[2], "deeper": (n[3] if len(n) > 3 and n[3] else "")}
-                      for n in notes.get(str(i), [])],
+            "images": c.get("images"), "heads": c.get("heads", []), "frags": c.get("frags", []),
+            "notes": [_note(n) for n in notes.get(str(i), [])],
         })
     slug = book.get("slug", os.path.basename(out_path))
     # ---- 图片交付:总字节≤2MB 内联 base64,否则复制到 assets/<slug>/ ----
@@ -415,14 +439,20 @@ def main():
     }
     data = json.dumps(BOOK, ensure_ascii=False)
     imgdata_js = json.dumps(imgmap, ensure_ascii=False).replace("</", "<\\/")
+    # Placeholders in the template first, data last: book text containing "__TITLE__" stays intact.
     html_out = (TEMPLATE
-                .replace("__DATA__", data.replace("</", "<\\/"))
+                .replace("__TITLE__", _html.escape(BOOK["title"])).replace("__SUBTITLE__", _html.escape(BOOK["subtitle"]))
+                .replace("__IMGPRE__", img_prefix.replace("\\", "/").replace('"', "%22"))
                 .replace("__IMGDATA__", imgdata_js)
-                .replace("__IMGPRE__", img_prefix)
-                .replace("__TITLE__", BOOK["title"]).replace("__SUBTITLE__", BOOK["subtitle"]))
+                .replace("__DATA__", data.replace("</", "<\\/")))
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     io.open(out_path, "w", encoding="utf-8").write(html_out)
     print("written:", out_path, len(html_out), "bytes,", len(img_entries), "imgs,", "inline" if imgmap else ("assets" if img_entries else "none"))
 
-def list2(x): return x
+def _note(n):
+    if isinstance(n, dict):
+        return {"at": n.get("at"), "tag": n.get("tag", ""), "text": n.get("text", ""), "deeper": n.get("deeper") or ""}
+    return {"at": n[0], "tag": n[1], "text": n[2], "deeper": (n[3] if len(n) > 3 and n[3] else "")}
+
+
 main()

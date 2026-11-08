@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import unicodedata
 from pathlib import Path
 
 import bleach
@@ -60,6 +61,46 @@ def split_frontmatter(text):
 
 def render_markdown(text):
     return bleach.clean(MD.render(text), tags={"p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "s", "blockquote", "ul", "ol", "li", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "a", "hr", "sup", "sub"}, attributes={"a": ["href", "title"]}, protocols={"http", "https", "zotero", "mailto"}, strip=True)
+
+
+_QUOTES = str.maketrans({"‘": "'", "’": "'", "‚": "'", "′": "'", "“": '"', "”": '"', "„": '"', "″": '"',
+                         "–": "-", "—": "-", "−": "-", "‐": "-", "‑": "-", "­": None, "​": None, "﻿": None})
+
+
+def _norm_forms(text):
+    """Comparable forms of PDF text. Extraction keeps line-break hyphens ("meth-\\nod"), ligatures
+    (ﬁ), curly quotes and full-width characters that an analyst naturally normalizes when quoting;
+    a literal whitespace-only comparison rejected faithful excerpts. Two forms are returned so a
+    real compound split across lines ("state-of-the-\\nart") still matches with its hyphen."""
+    t = unicodedata.normalize("NFKC", text).translate(_QUOTES)
+    joined = re.sub(r"(?<=[^\W\d_])-[ \t]*\r?\n\s*(?=[^\W\d_])", "", t)
+    squash = lambda s: re.sub(r"\s+", "", s).casefold()
+    return {squash(joined), squash(t)}
+
+
+def excerpt_found(excerpt, text, following=""):
+    """True if excerpt occurs verbatim (after normalization) in text, optionally running on into the
+    next page. "…" / "..." mark elisions: every piece must be present, in order, each >= 8 chars."""
+    pieces = [p for p in re.split(r"…|\.\.\.|\[\.\.\.\]", excerpt) if p.strip()]
+    if not pieces:
+        return False
+    # The excerpt must start on the cited page; it may only run on into the next one.
+    start_limit = max(len(h) for h in _norm_forms(text))
+    for hay in _norm_forms(text + ("\n" + following if following else "")):
+        pos, ok = 0, True
+        for n, piece in enumerate(pieces):
+            needle = min(_norm_forms(piece), key=len)
+            if len(needle) < 8:
+                ok = False
+                break
+            i = hay.find(needle, pos)
+            if i < 0 or (n == 0 and i >= start_limit):
+                ok = False
+                break
+            pos = i + len(needle)
+        if ok:
+            return True
+    return False
 
 
 def validate_note(note, claims, evidence):
@@ -122,9 +163,9 @@ def validate_note(note, claims, evidence):
                 text = external[source].get("text", "")
             else:
                 text = pages.get((source, page), "")
+            following = pages.get((source, page + 1), "") if isinstance(page, int) else ""
             excerpt = ref.get("excerpt", "")
-            normalize = lambda s: re.sub(r"\s+", "", s).casefold()
-            if not text or len(excerpt.strip()) < 8 or normalize(excerpt) not in normalize(text):
+            if not text or len(excerpt.strip()) < 8 or not excerpt_found(excerpt, text, following):
                 errors.append(f"Unverifiable excerpt for {cid}: {source} p.{page}")
             if evidence["level"] not in ("fulltext", "partial") and source not in ["abstract", "metadata", *external]:
                 errors.append("Full-text claim without full-text evidence: " + str(cid))

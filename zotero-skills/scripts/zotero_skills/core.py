@@ -245,6 +245,29 @@ if(!x || x.deleted) throw new Error('Item missing or trashed: '+P.key);
 return {item:x.toJSON(), notes: await Promise.all(x.isRegularItem()?x.getNotes().map(async id=>{const n=await Zotero.Items.getAsync(id);return {key:n.key,html:n.getNote(),tags:n.getTags()}}):[]), attachments:await Promise.all(x.isRegularItem()?x.getAttachments().map(async id=>{const a=await Zotero.Items.getAsync(id);return {key:a.key,title:a.getField('title'),contentType:a.attachmentContentType,path:await a.getFilePathAsync(),url:a.getField('url'),annotations:a.isPDFAttachment()?a.getAnnotations().map(n=>n.toJSON()):[]}}):[])};
 """, key=key, library=library)
 
+    def fetch_missing_files(self, key, library=1):
+        """Ask Zotero to sync down stored PDF/EPUB attachments that exist only on the sync server.
+
+        With WebDAV/Zotero storage set to "download as needed", an attachment's file is absent
+        until opened, and getFilePathAsync() returns false. Treating that as "no PDF" downgrades
+        the paper to abstract-only and makes the OA downloader attach a duplicate copy. Returns one
+        row per stored file attachment: status local | downloaded | not_synced (with Zotero's error).
+        """
+        return self.js("""
+const x=await Zotero.Items.getByLibraryAndKeyAsync(P.library,P.key);
+if(!x||x.deleted||!x.isRegularItem())return [];
+const out=[];
+for(const id of x.getAttachments()){const a=await Zotero.Items.getAsync(id);
+  if(a.deleted||!a.isStoredFileAttachment())continue;
+  const ct=a.attachmentContentType||'';
+  if(!/pdf|epub/i.test(ct))continue;
+  if(await a.getFilePathAsync()){out.push({key:a.key,contentType:ct,status:'local'});continue;}
+  let error=null;
+  try{await Zotero.Sync.Runner.downloadFile(a);}catch(e){error=String(e&&e.message||e);}
+  const ok=!!(await a.getFilePathAsync());
+  out.push({key:a.key,contentType:ct,status:ok?'downloaded':'not_synced',error:ok?null:(error||'file not on this machine and sync returned nothing'),expected_path:a.getFilePath()});}
+return out;""", key=key, library=library) or []
+
     def storage_dir(self, key, library=1):
         """Local storage folder holding this item's files (the PDF's folder).
 

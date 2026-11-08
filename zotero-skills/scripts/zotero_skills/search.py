@@ -379,8 +379,19 @@ FULLTEXT_MIN_PAGES = 3
 def collect_evidence(run, paper, mcp, net):
     directory = run.paper_dir(paper)
     library = run.state["config"].get("library", 1)
-    snap = mcp.snapshot(paper["item_key"], library)
     pages, sources, failures = [], [], list(paper.get("download_failures", []))
+    # Files kept on a sync server ("download as needed") are the user's full texts: fetch them
+    # before deciding the paper has none, and never replace them with a downloaded duplicate.
+    unsynced = []
+    fetch = getattr(mcp, "fetch_missing_files", None)
+    if fetch:
+        try:
+            unsynced = [r for r in fetch(paper["item_key"], library) if r.get("status") == "not_synced"]
+        except Exception as exc:
+            failures.append({"source": "zotero-file-sync", "status": "failed", "reason": type(exc).__name__ + ": " + str(exc)[:300]})
+    for row in unsynced:
+        failures.append({"source": row["key"], "status": "not_synced", "reason": "Zotero attachment file is not on this machine and sync failed: " + str(row.get("error"))[:300]})
+    snap = mcp.snapshot(paper["item_key"], library)
     # Read every existing PDF, including supplements; don't mistake a note for a full text.
     for attachment in snap["attachments"]:
         file = attachment.get("path")
@@ -394,7 +405,11 @@ def collect_evidence(run, paper, mcp, net):
             except Exception as exc:
                 failures.append({"source": attachment["key"], "reason": type(exc).__name__ + ": " + str(exc)})
     from .download import download_pdf, local_pdfs
-    if not local_pdfs(snap):
+    if unsynced:
+        paper["fulltext_blocker"] = "zotero_file_sync"
+    else:
+        paper.pop("fulltext_blocker", None)
+    if not local_pdfs(snap) and not unsynced:
         result = download_pdf(paper, directory, mcp, net, library, snapshot=snap)
         failures.extend(a for a in result['attempts'] if a.get('status') in ('failed', 'not_pdf', 'unconfigured'))
         if result['status'] == 'downloaded':
@@ -648,7 +663,13 @@ def triage(run):
         # selection.json reasons starting with "core" mark the review's anchors; other full texts get briefs.
         lines += ["", f"## 优先精读（core，{len(core)} 篇）", "", "精读集合不是入选上限。检查每个研究分支、定量比较与争议是否有足够全文锚点；有空缺就继续精读。外围文献可写 brief，但需如实记录实际阅读范围。", ""]
         lines += [f"- {p.get('title', '')[:90]} — `{p['id']}`" for p in core]
-    missing = groups["abstract"] + groups["metadata"] + groups["partial"]
+    blocked = [p for p in papers if p.get("fulltext_blocker") == "zotero_file_sync"]
+    if blocked:
+        lines += ["", f"## 全文在 Zotero 同步服务器上但未下载（{len(blocked)} 篇）", "",
+                  "这些条目**已有**PDF/EPUB 附件，只是文件不在本机（WebDAV/Zotero Storage「按需下载」），且本次自动下载失败（原因见 evidence.json 的 download_failures）。"
+                  "不要另找 OA 版本重复附加：先在 Zotero 设置 → 同步 里重新验证文件同步凭据（或手动打开附件触发下载），再运行 `resume --run PATH --refresh-evidence`。", ""]
+        lines += [f"- {p.get('title', '')[:90]} — `{p['id']}`" for p in blocked]
+    missing = [p for p in groups["abstract"] + groups["metadata"] + groups["partial"] if p.get("fulltext_blocker") != "zotero_file_sync"]
     if missing:
         lines += ["", "## 可升级为全文的条目", "", "通过机构访问、作者主页或预印本取得 PDF 后：附到 Zotero 条目并运行 `resume --run PATH --refresh-evidence`；或写 verified links JSON 用 `fetch-pdfs --run PATH --links FILE`，再 `resume --run PATH`。", ""]
         for p in missing:
